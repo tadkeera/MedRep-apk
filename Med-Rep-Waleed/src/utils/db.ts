@@ -341,16 +341,110 @@ export function registerNewEntity(type: 'doctor' | 'workplace', name: string, ex
     saveState(state);
     return newDoc;
   } else {
+    const hasRealCoords = typeof extra?.latitude === 'number' && typeof extra?.longitude === 'number';
     const newWorkplace: Workplace = {
       id,
       name,
-      latitude: extra?.latitude || 24.7136 + (Math.random() - 0.5) * 0.05,
-      longitude: extra?.longitude || 46.6753 + (Math.random() - 0.5) * 0.05,
+      latitude: hasRealCoords ? extra.latitude : null,
+      longitude: hasRealCoords ? extra.longitude : null,
+      locationPinned: hasRealCoords ? true : false,
     };
     state.workplaces.push(newWorkplace);
     saveState(state);
     return newWorkplace;
   }
+}
+
+// =====================================================================================
+// WORKPLACE LOCATION PINNING + DOCTOR <-> WORKPLACE LINKING
+// =====================================================================================
+
+/**
+ * One-time pinning of the real GPS coordinates for a workplace.
+ * Once pinned, the pin button disappears and these coordinates become the
+ * official reference for geofence-breach comparison and map plotting.
+ */
+export function pinWorkplaceLocation(workplaceName: string, lat: number, lng: number): Workplace | null {
+  const state = getInitialState();
+  let wp = state.workplaces.find(
+    (w) => w.name.trim().toLowerCase() === workplaceName.trim().toLowerCase()
+  );
+  if (wp) {
+    wp.latitude = lat;
+    wp.longitude = lng;
+    wp.locationPinned = true;
+    saveState(state);
+    return wp;
+  }
+  // Workplace not registered yet — register it with the pinned coordinates
+  return registerNewEntity('workplace', workplaceName.trim(), { latitude: lat, longitude: lng });
+}
+
+/** Returns true if the workplace already has officially pinned coordinates. */
+export function isWorkplacePinned(workplaceName: string): boolean {
+  const state = getInitialState();
+  const wp = state.workplaces.find(
+    (w) => w.name.trim().toLowerCase() === workplaceName.trim().toLowerCase()
+  );
+  return !!(wp && wp.locationPinned && typeof wp.latitude === 'number' && typeof wp.longitude === 'number');
+}
+
+/**
+ * Links a doctor to a workplace after a visit is saved.
+ * - The doctor can be linked to MULTIPLE workplaces (workplaceLocations[]).
+ * - Each link stores the workplace pinned coordinates, so the doctor appears
+ *   on the map at every workplace they operate from (name, speciality, class).
+ * - Also fills doctor's workplace1 / workplace2 fields if empty, and seeds the
+ *   doctor's primary map coordinates from the first linked workplace.
+ */
+export function linkDoctorToWorkplace(doctorName: string, workplaceName: string): void {
+  const state = getInitialState();
+  const doc = state.doctors.find(
+    (d) => d.name.trim().toLowerCase() === doctorName.trim().toLowerCase()
+  );
+  const wp = state.workplaces.find(
+    (w) => w.name.trim().toLowerCase() === workplaceName.trim().toLowerCase()
+  );
+  if (!doc || !wp) return;
+
+  const wpName = wp.name.trim();
+
+  // 1. Fill the legacy workplace1/workplace2 text fields (no duplicates)
+  if (!doc.workplace1 || !doc.workplace1.trim()) {
+    doc.workplace1 = wpName;
+  } else if (
+    doc.workplace1.trim().toLowerCase() !== wpName.toLowerCase() &&
+    (!doc.workplace2 || !doc.workplace2.trim())
+  ) {
+    doc.workplace2 = wpName;
+  }
+
+  // 2. Maintain the multi-workplace coordinates list (only with pinned coords)
+  if (wp.locationPinned && typeof wp.latitude === 'number' && typeof wp.longitude === 'number') {
+    if (!doc.workplaceLocations) doc.workplaceLocations = [];
+    const existing = doc.workplaceLocations.find(
+      (l) => l.workplaceName.trim().toLowerCase() === wpName.toLowerCase()
+    );
+    if (existing) {
+      // refresh coordinates in case workplace pin was updated
+      existing.latitude = wp.latitude;
+      existing.longitude = wp.longitude;
+    } else {
+      doc.workplaceLocations.push({
+        workplaceName: wpName,
+        latitude: wp.latitude,
+        longitude: wp.longitude,
+      });
+    }
+
+    // 3. Seed doctor primary coordinates from the first linked workplace
+    if (doc.locationLatitude === undefined || doc.locationLongitude === undefined) {
+      doc.locationLatitude = wp.latitude;
+      doc.locationLongitude = wp.longitude;
+    }
+  }
+
+  saveState(state);
 }
 
 export function updateDoctor(doctorId: string, updates: Partial<Doctor>): Doctor | null {
@@ -590,19 +684,25 @@ export function evaluateGuardrailAlarms(): GuardrailAlarm[] {
   const alarms: GuardrailAlarm[] = [];
 
   state.visits.forEach((v) => {
-    // Determine the target locations based on Doctor
-    let targetLat = v.workplaceLatitude;
-    let targetLon = v.workplaceLongitude;
+    // GEOFENCE RULE: compare the visit's actual GPS coordinates against the
+    // OFFICIAL PINNED coordinates of the WORKPLACE itself (not the doctor).
+    let targetLat: number | null | undefined = undefined;
+    let targetLon: number | null | undefined = undefined;
 
-    if (v.clientType === 'Doctor' && v.doctorName) {
-      const doc = state.doctors.find(d => d.name === v.doctorName);
-      if (doc && doc.locationLatitude !== undefined && doc.locationLongitude !== undefined) {
-        targetLat = doc.locationLatitude;
-        targetLon = doc.locationLongitude;
-      }
+    // 1. Primary source: the workplace registered pinned coordinates (live lookup)
+    const wp = state.workplaces.find(
+      (w) => v.workplaceName && w.name.trim().toLowerCase() === v.workplaceName.trim().toLowerCase()
+    );
+    if (wp && wp.locationPinned && typeof wp.latitude === 'number' && typeof wp.longitude === 'number') {
+      targetLat = wp.latitude;
+      targetLon = wp.longitude;
+    } else if (typeof v.workplaceLatitude === 'number' && typeof v.workplaceLongitude === 'number') {
+      // 2. Fallback: coordinates snapshotted on the visit record itself
+      targetLat = v.workplaceLatitude;
+      targetLon = v.workplaceLongitude;
     }
 
-    if (v.latitude && v.longitude && targetLat && targetLon) {
+    if (v.latitude && v.longitude && typeof targetLat === 'number' && typeof targetLon === 'number') {
       const dist = calculateDistance(v.latitude, v.longitude, targetLat, targetLon);
       if (dist > 100) {
         alarms.push({
@@ -610,8 +710,8 @@ export function evaluateGuardrailAlarms(): GuardrailAlarm[] {
           type: 'Geofencing Breach',
           titleAr: '🚨 خرق جيو-جغرافي (Geofencing Breach)',
           titleEn: '🚨 Geofencing Breach',
-          descriptionAr: `الزيارة للطبيب ${v.doctorName || 'عميل'} في مكان ${v.workplaceName} تبعد أكثر من ${Math.round(dist)}م عن الإحداثيات الحقيقية للطبيب.`,
-          descriptionEn: `Visit to ${v.doctorName || 'Client'} at ${v.workplaceName} is recorded ${Math.round(dist)}m away from doctor's real coordinates.`,
+          descriptionAr: `الزيارة للطبيب ${v.doctorName || 'عميل'} في مكان ${v.workplaceName} تبعد ${Math.round(dist)}م عن الإحداثيات المثبتة الرسمية لمكان العمل.`,
+          descriptionEn: `Visit to ${v.doctorName || 'Client'} at ${v.workplaceName} is recorded ${Math.round(dist)}m away from the workplace's officially pinned coordinates.`,
           severity: 'red',
         });
       }

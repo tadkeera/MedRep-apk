@@ -136,12 +136,30 @@ export default function MapView({ lang }: MapViewProps) {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {doctors.map((doctor) => {
-                // If real GPS doesn't exist, we fallback or ignore
-                // Using fallback to Yemen general areas if not set just for visualization
+              {doctors.flatMap((doctor) => {
+                // MULTI-WORKPLACE PLOTTING: a doctor appears at EVERY linked
+                // workplace with pinned coordinates (name, speciality, class,
+                // workplace name shown in the popup).
+                if (doctor.workplaceLocations && doctor.workplaceLocations.length > 0) {
+                  return doctor.workplaceLocations.map((loc, idx) => (
+                    <Marker key={`${doctor.id}-wp-${idx}`} position={[loc.latitude, loc.longitude]}>
+                      <Popup>
+                        <div className="font-sans text-right" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+                          <div className="font-bold text-slate-900 border-b pb-1 mb-1">{doctor.name}</div>
+                          <div className="text-xs text-slate-500">{doctor.speciality}</div>
+                          <div className="text-xs font-bold mt-1 text-indigo-600">Class {doctor.classRating}</div>
+                          <div className="text-xs text-emerald-700 font-bold mt-1 flex items-center gap-1">
+                            🏥 {loc.workplaceName}
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ));
+                }
+                // Fallback: doctor primary coordinates (legacy single-location)
                 const lat = doctor.locationLatitude || (15.3694 + (Math.random() - 0.5) * 4);
                 const lng = doctor.locationLongitude || (44.1910 + (Math.random() - 0.5) * 4);
-                return (
+                return [(
                   <Marker key={doctor.id} position={[lat, lng]}>
                     <Popup>
                       <div className="font-sans text-right" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -151,7 +169,7 @@ export default function MapView({ lang }: MapViewProps) {
                       </div>
                     </Popup>
                   </Marker>
-                );
+                )];
               })}
             </MapContainer>
           </div>

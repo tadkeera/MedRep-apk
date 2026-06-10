@@ -33,6 +33,14 @@ export interface Doctor {
   workplace2?: string;
   locationLatitude?: number;
   locationLongitude?: number;
+  // A doctor can be linked to MULTIPLE workplaces. Each entry stores the
+  // workplace name and the pinned coordinates of that workplace, so the
+  // doctor appears on the map at every workplace they operate from.
+  workplaceLocations?: {
+    workplaceName: string;
+    latitude: number;
+    longitude: number;
+  }[];
 }
 
 export interface Workplace {
@@ -40,6 +48,9 @@ export interface Workplace {
   name: string;
   latitude: number | null;
   longitude: number | null;
+  // True only after the rep explicitly pins the real GPS coordinates of this
+  // workplace (one-time action). Used for geofence comparison and map plotting.
+  locationPinned?: boolean;
 }
 
 export type ClientCategory = 'مستشفى' | 'مركز طبي' | 'عيادة خاصة' | 'صيدلية' | 'Hospital' | 'Medical Center' | 'Private Clinic' | 'Pharmacy';

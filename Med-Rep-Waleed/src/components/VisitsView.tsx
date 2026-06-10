@@ -22,7 +22,10 @@ import {
   standardizeSampleName,
   wipeAllMigratedVisitsAndRestoreStock,
   wipeAllDataComplete,
-  saveState
+  saveState,
+  pinWorkplaceLocation,
+  isWorkplacePinned,
+  linkDoctorToWorkplace
 } from '../utils/db';
 import { gpsTracker, LocationData, GeolocationError, GeolocationStatus } from '../utils/geolocation';
 import { VisitLog, VisitSample, Doctor, Workplace } from '../types';
@@ -188,6 +191,10 @@ export default function VisitsView({ lang }: VisitsViewProps) {
       docName: 'اسم الطبيب المعالج',
       custName: 'اسم الصيدلية / المستشفى العميل',
       workplace: 'مكان العمل الحالي الطبيب',
+      pinWorkplaceBtn: '📍 تثبيت احداثيات الموقع الحالية لمكان العمل',
+      pinWorkplaceDone: '✓ تم تثبيت إحداثيات مكان العمل هذا مسبقاً',
+      pinWorkplaceSuccess: 'تم حفظ إحداثيات الموقع الحالي كموقع رسمي لمكان العمل',
+      pinWorkplaceNoGps: 'لا توجد إحداثيات GPS متاحة حالياً للتثبيت. انتظر اكتمال تحديد الموقع.',
       notes: 'ملاحظات وتفاصيل الدعاية الطبية',
       geoStatus: 'إحداثيات التتبع الجغرافي للشبكة GPS',
       fetchingGps: 'جاري جلب إحداثيات GPS...',
@@ -224,6 +231,10 @@ export default function VisitsView({ lang }: VisitsViewProps) {
       docName: 'Doctor Name',
       custName: 'Pharmacy / Customer Name',
       workplace: 'Workplace Clinic / Hospital',
+      pinWorkplaceBtn: '📍 Pin Current GPS Coordinates for this Workplace',
+      pinWorkplaceDone: '✓ Workplace coordinates already pinned',
+      pinWorkplaceSuccess: 'Current location saved as the official workplace coordinates',
+      pinWorkplaceNoGps: 'No GPS coordinates available to pin yet. Wait for location lock.',
       notes: 'Notes & Detailing Comments',
       geoStatus: 'GPS Coordinates & Tracking',
       fetchingGps: 'Acquiring GPS position...',
@@ -456,6 +467,13 @@ export default function VisitsView({ lang }: VisitsViewProps) {
       isUnplanned,
     });
 
+    // POST-SAVE LINKING: bind the doctor to this workplace (a doctor can have
+    // multiple workplaces). The doctor inherits the workplace pinned coordinates
+    // so they appear on the map (name, speciality, class) at this workplace.
+    if (activeTab === 'Doctor' && doctorName.trim() && workplaceName.trim()) {
+      linkDoctorToWorkplace(doctorName.trim(), workplaceName.trim());
+    }
+
     // Reset Form
     setDoctorName('');
     setWorkplaceName('');
@@ -673,6 +691,27 @@ export default function VisitsView({ lang }: VisitsViewProps) {
   };
 
   // Lazy workplace coordinate tracking fixer
+  // ===========================================================================
+  // ONE-TIME WORKPLACE COORDINATES PINNING
+  // The pin button appears only once per workplace; after pinning, the
+  // coordinates become the official workplace location (geofence reference).
+  // ===========================================================================
+  const handlePinWorkplaceLocation = () => {
+    if (!workplaceName.trim()) return;
+    if (!latitude || !longitude) {
+      alert(t.pinWorkplaceNoGps);
+      return;
+    }
+    const wp = pinWorkplaceLocation(workplaceName.trim(), latitude, longitude);
+    if (wp) {
+      reloadDb();
+      alert(`${t.pinWorkplaceSuccess}\n(${workplaceName.trim()}): ${latitude.toFixed(7)}, ${longitude.toFixed(7)}`);
+    }
+  };
+
+  // Live pinned-status flag for the workplace currently typed in the form
+  const workplacePinnedFlag = workplaceName.trim() ? isWorkplacePinned(workplaceName.trim()) : false;
+
   const handleFixWorkplaceLocationInput = (workplaceName: string) => {
     const state = getInitialState();
     const wp = state.workplaces.find(w => w.name.trim().toLowerCase() === workplaceName.trim().toLowerCase());
@@ -1223,6 +1262,26 @@ export default function VisitsView({ lang }: VisitsViewProps) {
                             </button>
                           ))}
                         </div>
+                      )}
+
+                      {/* ONE-TIME workplace coordinates pin button:
+                          visible only while this workplace has no pinned coordinates yet */}
+                      {workplaceName.trim() && (
+                        workplacePinnedFlag ? (
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {t.pinWorkplaceDone}
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handlePinWorkplaceLocation}
+                            className="w-full px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-purple-600/15 transition-all cursor-pointer"
+                          >
+                            <MapPin className="w-4 h-4" />
+                            {t.pinWorkplaceBtn}
+                          </button>
+                        )
                       )}
                     </div>
                   )}
