@@ -1260,27 +1260,14 @@ export default function ReportsView({ lang }: ReportsViewProps) {
             </div>
           </motion.div>
         ) : reportType === 'clientsList' as any ? (() => {
-          // ===== Link doctors' workplaces into the clients list =====
-          // Any workplace registered on a doctor profile (workplace1 / workplace2)
-          // appears automatically in this list with its linked doctors.
+          // ===== Merge app workplaces (منشآت العمل) into the clients list =====
+          // Every workplace registered in the app appears automatically in this
+          // list, and any workplace added later will show up here instantly
+          // (computed live from the database on every render).
           const existingClientNames = new Set(clientsData.map((c) => (c.name || '').trim()));
-          const wpMap = new Map<string, { name: string; doctors: string[] }>();
-          db.doctors.forEach((d) => {
-            [d.workplace1, d.workplace2].forEach((wp) => {
-              const key = (wp || '').trim();
-              if (!key || existingClientNames.has(key)) return;
-              if (!wpMap.has(key)) wpMap.set(key, { name: key, doctors: [] });
-              if (!wpMap.get(key)!.doctors.includes(d.name)) wpMap.get(key)!.doctors.push(d.name);
-            });
-          });
-          const doctorWorkplaceRows = Array.from(wpMap.values());
-          // Map of which doctors are linked to each real client (matched by name)
-          const clientLinkedDoctors = (clientName: string) => {
-            const key = (clientName || '').trim();
-            return db.doctors
-              .filter((d) => (d.workplace1 || '').trim() === key || (d.workplace2 || '').trim() === key)
-              .map((d) => d.name);
-          };
+          const workplaceRows = db.workplaces.filter(
+            (w) => (w.name || '').trim() && !existingClientNames.has((w.name || '').trim())
+          );
           return (
           <motion.div 
             key="clientslist-report"
@@ -1316,7 +1303,6 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                     <th className="p-3 text-right">{t.clientName}</th>
                     <th className="p-3 text-center">{t.clientTypeLabel}</th>
                     <th className="p-3 text-right">{t.clientAddress}</th>
-                    <th className="p-3 text-right">{lang === 'ar' ? 'الأطباء المرتبطون (مكان العمل)' : 'Linked Doctors (Workplace)'}</th>
                     <th className="p-3 text-center">{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
@@ -1329,20 +1315,6 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                         <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs">{client.type}</span>
                       </td>
                       <td className="p-3 text-slate-700">{client.address || '------'}</td>
-                      <td className="p-3 text-slate-700">
-                        {(() => {
-                          const linked = clientLinkedDoctors(client.name);
-                          return linked.length ? (
-                            <div className="flex flex-wrap gap-1">
-                              {linked.map((dn) => (
-                                <span key={dn} className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold">{dn}</span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-slate-300">------</span>
-                          );
-                        })()}
-                      </td>
                       <td className="p-3 text-center">
                         <button
                           onClick={() => {
@@ -1363,42 +1335,45 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                       </td>
                     </tr>
                   ))}
-                  {/* Auto-linked workplaces pulled from doctors' profiles (workplace1/workplace2) */}
-                  {doctorWorkplaceRows.map((wp, wIdx) => (
-                    <tr key={`docwp-${wp.name}`} className="hover:bg-slate-50 transition-colors bg-amber-50/30">
+                  {/* App workplaces (منشآت العمل) merged automatically into the clients list.
+                      Any workplace added later in the app appears here instantly. */}
+                  {workplaceRows.map((wp, wIdx) => (
+                    <tr key={`wp-${wp.id}`} className="hover:bg-slate-50 transition-colors">
                       <td className="p-3 w-8 text-slate-400 font-mono text-center">{clientsData.length + wIdx + 1}</td>
                       <td className="p-3 font-bold text-slate-900 text-xs">{wp.name}</td>
                       <td className="p-3 text-center text-slate-600 font-medium">
-                        <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-xs">
-                          {lang === 'ar' ? 'مكان عمل طبيب' : 'Doctor Workplace'}
+                        <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-xs">
+                          {lang === 'ar' ? 'منشأة عمل' : 'Workplace'}
                         </span>
                       </td>
-                      <td className="p-3 text-slate-700">------</td>
                       <td className="p-3 text-slate-700">
-                        <div className="flex flex-wrap gap-1">
-                          {wp.doctors.map((dn) => (
-                            <span key={dn} className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold">{dn}</span>
-                          ))}
-                        </div>
+                        {typeof wp.latitude === 'number' && typeof wp.longitude === 'number'
+                          ? `${wp.latitude.toFixed(5)}, ${wp.longitude.toFixed(5)}`
+                          : '------'}
                       </td>
                       <td className="p-3 text-center">
                         <button
                           onClick={() => {
-                            // Convert this auto-linked workplace into a registered client
+                            // Promote this workplace into a fully editable registered client
                             setEditingClient(null);
-                            setEditClientFields({ name: wp.name, category: (lang === 'ar' ? 'مستشفى' : 'Hospital') as ClientCategory });
+                            setEditClientFields({
+                              name: wp.name,
+                              category: (lang === 'ar' ? 'مستشفى' : 'Hospital') as ClientCategory,
+                              latitude: typeof wp.latitude === 'number' ? wp.latitude : undefined,
+                              longitude: typeof wp.longitude === 'number' ? wp.longitude : undefined,
+                            });
                             setIsClientModalOpen(true);
                           }}
                           className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded text-[10px] font-bold"
                         >
-                          {lang === 'ar' ? 'تسجيل كعميل' : 'Register as Client'}
+                          {lang === 'ar' ? 'تحويل لعميل' : 'Convert to Client'}
                         </button>
                       </td>
                     </tr>
                   ))}
-                  {clientsData.length === 0 && doctorWorkplaceRows.length === 0 && (
+                  {clientsData.length === 0 && workplaceRows.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-6 text-center text-slate-400">
+                      <td colSpan={5} className="p-6 text-center text-slate-400">
                         {lang === 'ar' ? 'لا توجد بيانات للعملاء' : 'No clients found'}
                       </td>
                     </tr>
