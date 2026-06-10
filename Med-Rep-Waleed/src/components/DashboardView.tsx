@@ -129,17 +129,25 @@ export default function DashboardView({ lang }: DashboardViewProps) {
   // =====================================================================================
   // دقة الفلترة: حساب الزيارات التي وقعت في الأسبوع الحالي فقط (حل النقطة 8)
   // =====================================================================================
+  // Work week starts SATURDAY and ends THURSDAY (Friday is the rest day)
   const getStartOfWeek = (d: Date) => {
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday is start
-    return new Date(d.setDate(diff));
+    const day = d.getDay(); // Sun=0 .. Sat=6
+    const daysSinceSaturday = (day + 1) % 7; // Sat=0, Sun=1, Mon=2, ... Fri=6
+    const result = new Date(d);
+    result.setDate(d.getDate() - daysSinceSaturday);
+    return result;
   };
   const startOfWeekDate = getStartOfWeek(new Date());
   startOfWeekDate.setHours(0,0,0,0);
 
+  // End of work week = Thursday 23:59:59 (start Saturday + 5 days)
+  const endOfWeekDate = new Date(startOfWeekDate);
+  endOfWeekDate.setDate(startOfWeekDate.getDate() + 5);
+  endOfWeekDate.setHours(23,59,59,999);
+
   const visitsThisWeek = db.visits.filter((v) => {
     const vDate = new Date(v.visitDate);
-    return vDate >= startOfWeekDate;
+    return vDate >= startOfWeekDate && vDate <= endOfWeekDate;
   });
 
   const targetCallRate = 60;
