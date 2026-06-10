@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Med Rep - مندوب الدعاية الطبية الذكي</title>
+    <!-- Premium Google Fonts for Arabic (Cairo) and English (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Real leaflet.js maps bundle implementation (Important - maps fix) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- PWA Dynamic Web App Manifest representation -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#4f46e5" />
+    <link rel="apple-touch-icon" href="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+    <script type="module" crossorigin src="/assets/index-lHerqQeg.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CU8UNmHX.css">
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Native PWA Service Worker Unregister and Cache Buster to bypass stale offline caches -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          for (let registration of registrations) {
+            registration.unregister().then(() => {
+              console.log('Unregistered active service worker successfully to bypass cache');
+            });
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(keys => {
+          keys.forEach(key => {
+            caches.delete(key).then(() => {
+              console.log('Cleared cache storage:', key);
+            });
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
+
