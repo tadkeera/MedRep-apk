@@ -30,11 +30,80 @@ interface DatabaseState {
 // =====================================================================================
 
 /**
+ * Native Android bridge (present when running inside the Med Rep APK WebView).
+ * Provides persistent storage in the phone's internal app memory, immune to
+ * WebView storage eviction or origin changes.
+ */
+function getNativeBridge(): any | null {
+  const w = window as any;
+  return w.MedRepNative && typeof w.MedRepNative.persistState === 'function' ? w.MedRepNative : null;
+}
+
+function persistToNative(state: DatabaseState) {
+  try {
+    const bridge = getNativeBridge();
+    if (!bridge) return;
+    const json = JSON.stringify(state);
+    // btoa-safe UTF-8 base64 encoding
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    bridge.persistState(b64);
+  } catch (err) {
+    console.warn('Native persist failed (non-fatal):', err);
+  }
+}
+
+function restoreFromNative(): DatabaseState | null {
+  try {
+    const w = window as any;
+    if (!w.MedRepNative || typeof w.MedRepNative.loadPersistedState !== 'function') return null;
+    const raw = w.MedRepNative.loadPersistedState();
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.invoices && parsed.doctors && parsed.visits) {
+      return parsed as DatabaseState;
+    }
+  } catch (err) {
+    console.warn('Native restore failed (non-fatal):', err);
+  }
+  return null;
+}
+
+/**
  * Pre-boot initialization: Loads state from IndexedDB to memory/localStorage synchronously
  * before React mounts the virtual DOM tree, preventing data caps and page flicker.
+ * Recovery chain: localStorage -> IndexedDB -> native Android internal storage.
  */
 export function initIndexedDB(): Promise<void> {
   return new Promise((resolve) => {
+    const finish = () => {
+      // FINAL SAFETY NET: if web storage came up empty (cleared WebView data,
+      // changed origin, OS eviction...) recover the full database from the
+      // phone's internal app storage via the native bridge.
+      try {
+        const existing = localStorage.getItem(`${STORAGE_PREFIX}state`);
+        let needRecovery = !existing;
+        if (existing) {
+          try {
+            const p = JSON.parse(existing);
+            const empty = (!p.doctors || !p.doctors.length) && (!p.visits || !p.visits.length) && (!p.invoices || !p.invoices.length);
+            if (empty) needRecovery = true;
+          } catch { needRecovery = true; }
+        }
+        if (needRecovery) {
+          const recovered = restoreFromNative();
+          if (recovered) {
+            localStorage.setItem(`${STORAGE_PREFIX}state`, JSON.stringify(recovered));
+            // Re-seed IndexedDB with the recovered state too
+            saveState(recovered);
+            console.log('Database recovered from native internal storage.');
+          }
+        }
+      } catch (err) {
+        console.warn('Native recovery check failed:', err);
+      }
+      resolve();
+    };
+
     try {
       const request = indexedDB.open('MedRepSecureIDB_v2', 1);
       request.onupgradeneeded = (e: any) => {
@@ -52,14 +121,14 @@ export function initIndexedDB(): Promise<void> {
           if (getReq.result) {
             localStorage.setItem(`${STORAGE_PREFIX}state`, JSON.stringify(getReq.result));
           }
-          resolve();
+          finish();
         };
-        getReq.onerror = () => resolve();
+        getReq.onerror = () => finish();
       };
-      request.onerror = () => resolve();
+      request.onerror = () => finish();
     } catch (err) {
       console.warn('IndexedDB unavailable, falling back to local storage:', err);
-      resolve();
+      finish();
     }
   });
 }
@@ -119,6 +188,11 @@ export function saveState(state: DatabaseState) {
   } catch (err) {
     console.error('Failed to sync to IndexedDB', err);
   }
+
+  // 3. Persist to the phone's internal app storage via the native Android
+  //    bridge (when running inside the APK) — guarantees data survives app
+  //    restarts even if the WebView's web storage is wiped.
+  persistToNative(state);
 }
 
 // -----------------------------------------------------

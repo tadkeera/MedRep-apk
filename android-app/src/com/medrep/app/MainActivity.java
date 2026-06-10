@@ -38,6 +38,9 @@ public class MainActivity extends Activity {
     private static final String APP_FOLDER = "Med Rep";
     private static final int REQ_PERMISSIONS = 1001;
     private static final int REQ_FILE_CHOOSER = 1002;
+    // FIXED port => stable WebView origin => localStorage/IndexedDB survive app restarts
+    private static final int FIXED_PORT = 17653;
+    private static final String AUTO_STATE_FILE = "medrep_auto_state.json";
 
     private WebView webView;
     private LocalServer server;
@@ -54,7 +57,9 @@ public class MainActivity extends Activity {
 
         try {
             server = new LocalServer(getAssets());
-            serverPort = server.start();
+            // Fixed port keeps the WebView origin identical across app restarts,
+            // so localStorage / IndexedDB data is never lost between sessions.
+            serverPort = server.start(FIXED_PORT);
         } catch (IOException e) {
             Toast.makeText(this, "Server error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
@@ -284,6 +289,55 @@ public class MainActivity extends Activity {
         public String getAppFolderPath() {
             return getAppRoot().getAbsolutePath();
         }
+
+        /**
+         * AUTO-PERSIST: called by the web app on every saveState().
+         * Writes the full database JSON to:
+         *   1) the app's private internal storage (always survives restarts), and
+         *   2) a rolling auto-backup inside /Med Rep/backup/.
+         */
+        @JavascriptInterface
+        public void persistState(String base64Utf8Json) {
+            try {
+                byte[] bytes = Base64.decode(base64Utf8Json, Base64.DEFAULT);
+                // 1) Internal private copy (authoritative, no permission needed)
+                File internal = new File(getFilesDir(), AUTO_STATE_FILE);
+                try (FileOutputStream fos = new FileOutputStream(internal)) {
+                    fos.write(bytes);
+                }
+                // 2) Rolling external auto-backup copy
+                try {
+                    writeToFolder("backup", "medrep_auto_state.json", bytes);
+                } catch (Exception ignored) {}
+            } catch (Exception e) {
+                // never crash the app because of persistence
+            }
+        }
+
+        /**
+         * AUTO-RESTORE: called by the web app at boot when its own storage is empty.
+         * Returns the last persisted database JSON, or "" if none exists.
+         */
+        @JavascriptInterface
+        public String loadPersistedState() {
+            try {
+                File internal = new File(getFilesDir(), AUTO_STATE_FILE);
+                File source = internal.exists() ? internal : new File(new File(getAppRoot(), "backup"), "medrep_auto_state.json");
+                if (!source.exists()) return "";
+                byte[] buf = new byte[(int) source.length()];
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(source)) {
+                    int off = 0;
+                    while (off < buf.length) {
+                        int n = fis.read(buf, off, buf.length - off);
+                        if (n < 0) break;
+                        off += n;
+                    }
+                }
+                return new String(buf, StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                return "";
+            }
+        }
     }
 
     @Override
@@ -307,9 +361,15 @@ public class MainActivity extends Activity {
 
         LocalServer(AssetManager assets) { this.assets = assets; }
 
-        int start() throws IOException {
+        int start(int preferredPort) throws IOException {
             socket = new ServerSocket();
-            socket.bind(new InetSocketAddress("127.0.0.1", 0));
+            try {
+                // Always try the fixed port first => stable origin => persistent web storage
+                socket.bind(new InetSocketAddress("127.0.0.1", preferredPort));
+            } catch (IOException busy) {
+                socket = new ServerSocket();
+                socket.bind(new InetSocketAddress("127.0.0.1", 0));
+            }
             Thread t = new Thread(this, "MedRepLocalServer");
             t.setDaemon(true);
             t.start();
