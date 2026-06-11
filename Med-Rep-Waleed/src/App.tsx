@@ -11,6 +11,7 @@ import VisitsLogView from './components/VisitsLogView';
 import CyclePlanView from './components/CyclePlanView';
 import ReportsView from './components/ReportsView';
 import AnalyticsView from './components/AnalyticsView';
+import AiAnalysisView from './components/AiAnalysisView';
 import FileManagerView from './components/FileManagerView';
 import SettingsView from './components/SettingsView';
 
@@ -36,7 +37,7 @@ import {
   Users
 } from 'lucide-react';
 
-type SfaView = 'dashboard' | 'invoices' | 'visits' | 'visitslog' | 'cycleplan' | 'reports' | 'ai' | 'files' | 'settings' | 'map' | 'doctors';
+type SfaView = 'dashboard' | 'invoices' | 'visits' | 'visitslog' | 'cycleplan' | 'reports' | 'ai' | 'aianalysis' | 'files' | 'settings' | 'map' | 'doctors';
 
 
 export default function App() {
@@ -79,6 +80,7 @@ export default function App() {
       cycleplan: 'خطة السير الأسبوعية',
       reports: 'محرك التقارير',
       aiTools: 'التحليلات',
+      aiAnalysis: 'AI تحليل',
       fileManager: 'المستندات والأمانية',
       settings: 'الإعدادات والبروفايل',
       map: 'الخريطة',
@@ -99,6 +101,7 @@ export default function App() {
       cycleplan: 'Weekly Cycle Plan',
       reports: 'Reporting Engine',
       aiTools: 'Analytics',
+      aiAnalysis: 'AI Analysis',
       fileManager: 'Local Database System',
       settings: 'Settings & Profile',
       map: 'Map View',
@@ -161,6 +164,7 @@ export default function App() {
           {activeView === 'cycleplan' && <CyclePlanView lang={lang} />}
           {activeView === 'reports' && <ReportsView lang={lang} />}
           {activeView === 'ai' && <AnalyticsView lang={lang} />}
+          {activeView === 'aianalysis' && <AiAnalysisView lang={lang} />}
           {activeView === 'map' && <MapView lang={lang} />}
           {activeView === 'doctors' && <DoctorsDirectoryView lang={lang} />}
           {activeView === 'files' && <FileManagerView lang={lang} />}
@@ -180,6 +184,7 @@ export default function App() {
           <BottomNavBtn icon={<Map className="w-5 h-5 sm:w-6 sm:h-6" />} label={t.map} active={activeView === 'map'} onClick={() => setActiveView('map')} />
           <BottomNavBtn icon={<FileText className="w-5 h-5 sm:w-6 sm:h-6" />} label={t.reports} active={activeView === 'reports'} onClick={() => setActiveView('reports')} />
           <BottomNavBtn icon={<Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />} label={t.aiTools} active={activeView === 'ai'} onClick={() => setActiveView('ai')} />
+          <BottomNavBtn icon={<Activity className="w-5 h-5 sm:w-6 sm:h-6" />} label={t.aiAnalysis} active={activeView === 'aianalysis'} onClick={() => setActiveView('aianalysis')} />
           <BottomNavBtn icon={<Folder className="w-5 h-5 sm:w-6 sm:h-6" />} label={t.fileManager} active={activeView === 'files'} onClick={() => setActiveView('files')} />
           <BottomNavBtn icon={<Settings className="w-5 h-5 sm:w-6 sm:h-6" />} label={t.settings} active={activeView === 'settings'} onClick={() => setActiveView('settings')} />
         </div>
