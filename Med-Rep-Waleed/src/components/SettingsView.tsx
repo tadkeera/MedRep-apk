@@ -15,6 +15,7 @@ interface SettingsViewProps {
 export default function SettingsView({ lang, onProfileChange }: SettingsViewProps) {
   const [repName, setRepName] = useState(() => localStorage.getItem('medrep_representative_name') || 'وليد فريد');
   const [repGrade, setRepGrade] = useState(() => localStorage.getItem('medrep_representative_grade') || 'مستشار SFA أول');
+  const [companyName, setCompanyName] = useState(() => localStorage.getItem('medrep_company_name') || 'فايزر العالمية (Pfizer Global)');
   const [logoBase64, setLogoBase64] = useState<string | null>(() => localStorage.getItem('corporate_logo'));
   
   const [profileSuccess, setProfileSuccess] = useState(false);
@@ -28,6 +29,7 @@ export default function SettingsView({ lang, onProfileChange }: SettingsViewProp
       saveProfile: 'حفظ التعديلات للبروفايل',
       repField: 'اسم المندوب الميداني (Representative Name)',
       gradeField: 'مستوى فعالية الاستهداف / الرتبة (SFA Grade)',
+      companyField: 'اسم الشركة الراعية (Company Name)',
       logoField: 'شعار الهيئة الطبية / الشركة (Corporate Logo)',
       logoHint: 'ارفع ملف PNG أو JPG ليتم ختمه تلقائيًا في التقارير المصدرة.',
       logoPreview: 'شكل الشعار الحالي المعتمد:',
@@ -43,6 +45,7 @@ export default function SettingsView({ lang, onProfileChange }: SettingsViewProp
       saveProfile: 'Save Profile Changes',
       repField: 'Medical Representative Name',
       gradeField: 'SFA Level / Class',
+      companyField: 'Sponsoring Company Name',
       logoField: 'Corporate Logo Asset',
       logoHint: 'Upload a PNG or JPG logo to be stamped dynamically onto exported PDF/HTML summaries.',
       logoPreview: 'Active Corporate Logo Preview:',
@@ -68,6 +71,7 @@ export default function SettingsView({ lang, onProfileChange }: SettingsViewProp
 
     localStorage.setItem('medrep_representative_name', trimmedName);
     localStorage.setItem('medrep_representative_grade', repGrade.trim());
+    localStorage.setItem('medrep_company_name', companyName.trim());
     
     setProfileSuccess(true);
     if (onProfileChange) {
@@ -155,6 +159,17 @@ export default function SettingsView({ lang, onProfileChange }: SettingsViewProp
                   value={repGrade}
                   onChange={(e) => setRepGrade(e.target.value)}
                   placeholder="مثال: مستشار أول SFA"
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-xs font-bold text-slate-600">{t.companyField}</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs outline-none font-semibold transition-all"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="مثال: فايزر العالمية (Pfizer Global)"
                 />
               </div>
             </div>

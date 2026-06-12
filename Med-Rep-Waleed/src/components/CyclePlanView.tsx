@@ -30,8 +30,14 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 
   const [dateFrom, setDateFrom] = useState('2026-05-30');
   const [dateTo, setDateTo] = useState('2026-06-04');
-  const [companyName, setCompanyName] = useState('فايزر العالمية (Pfizer Global)');
-  const [repName, setRepName] = useState('وليد فريد (Waleed Fareed)');
+  // Company & representative names are ALWAYS sourced from the Settings &
+  // Profile page (localStorage) so both stay in sync across the app.
+  const [companyName, setCompanyName] = useState(
+    () => localStorage.getItem('medrep_company_name') || 'فايزر العالمية (Pfizer Global)'
+  );
+  const [repName, setRepName] = useState(
+    () => localStorage.getItem('medrep_representative_name') || 'وليد فريد (Waleed Fareed)'
+  );
 
   // Grid Plan State
   const [plans, setPlans] = useState<DailyCyclePlan[]>([
@@ -67,10 +73,11 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       const active = currentState.weeklyCycles[0];
       setDateFrom(active.dateFrom);
       setDateTo(active.dateTo);
-      setCompanyName(active.companyName);
-      setRepName(active.repName);
       setPlans(active.plans);
     }
+    // Company & rep names always reflect the Settings & Profile page values
+    setCompanyName(localStorage.getItem('medrep_company_name') || 'فايزر العالمية (Pfizer Global)');
+    setRepName(localStorage.getItem('medrep_representative_name') || 'وليد فريد (Waleed Fareed)');
   }, []);
 
   const t = {
@@ -88,7 +95,7 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       savePlan: 'حفظ الخطة',
       exportPlan: 'تصدير المستند المعتمد للتحميل',
       exportSuccess: 'تم تصدير الخطة المعتمدة وكتابتها بنجاح داخل مجلد التحميلات الخاص بك: /Med Rep/DOWNLOAD/',
-      saveSuccess: 'تم تسوية وتوثيق خطة السير الحالية في الذاكرة المحلية بنجاح!',
+      saveSuccess: 'تم حفظ الخطة الأسبوعية في قسم الخطط المحفوظة بنجاح، وأصبحت الخطة النشطة المرتبطة بنسبة الالتزام في لوحة التحكم!',
       workplacesList: 'العيادات المستهدفة:',
       emptyShift: 'خفيفة / بدون زيارات مجدولة',
     },
@@ -106,7 +113,7 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       savePlan: 'Save Plan',
       exportPlan: 'Export Approved Document',
       exportSuccess: 'Approved SFA plan written to storage successfully: /Med Rep/DOWNLOAD/',
-      saveSuccess: 'Weekly flight plan logged in local SFA modules!',
+      saveSuccess: 'Weekly plan saved to the archive and set as the ACTIVE plan used by the dashboard compliance metric!',
       workplacesList: 'Targeted Workplaces:',
       emptyShift: 'Light cycle / No clinic visits scheduled',
     },
@@ -617,14 +624,14 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={handleSavePlanLayout}
-            className="px-4 py-2 bg-slate-850 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-5 py-2 bg-gradient-to-l from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25 cursor-pointer"
           >
             <Check className="w-4 h-4" />
-            {t.savePlan}
+            {lang === 'ar' ? 'حفظ الخطة الأسبوعية' : 'Save Weekly Plan'}
           </button>
           <button
             type="button"
@@ -654,22 +661,34 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-600">{t.compName}</label>
+            <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+              {t.compName}
+              <span className="text-[8.5px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-extrabold">
+                {lang === 'ar' ? 'من الإعدادات' : 'from Settings'}
+              </span>
+            </label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg px-3 py-2 text-xs outline-none font-medium"
+              readOnly
+              className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none font-bold text-slate-700 cursor-not-allowed"
               value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
+              title={lang === 'ar' ? 'يُعدل من صفحة الإعدادات والبروفايل' : 'Edit from Settings & Profile page'}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-600">{t.repNameName}</label>
+            <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+              {t.repNameName}
+              <span className="text-[8.5px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-extrabold">
+                {lang === 'ar' ? 'من الإعدادات' : 'from Settings'}
+              </span>
+            </label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-lg px-3 py-2 text-xs outline-none font-medium"
+              readOnly
+              className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none font-bold text-slate-700 cursor-not-allowed"
               value={repName}
-              onChange={(e) => setRepName(e.target.value)}
+              title={lang === 'ar' ? 'يُعدل من صفحة الإعدادات والبروفايل' : 'Edit from Settings & Profile page'}
             />
           </div>
 
