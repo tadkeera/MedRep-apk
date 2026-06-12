@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { getInitialState, saveVirtualFile, updateDoctor, addClient, updateClient, getClients, deleteDoctor, deleteClient } from '../utils/db';
+import { getInitialState, saveVirtualFile, updateDoctor, addClient, updateClient, getClients, deleteDoctor, deleteClient, linkDoctorToWorkplace } from '../utils/db';
 import { Doctor, Client, ClientCategory } from '../types';
 import { FileText, Search, TrendingUp, Sparkles, Download, Printer, Calendar, Loader, Plus, MapPin, Check, ArrowRight, Building2, Stethoscope, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -67,6 +67,11 @@ export default function ReportsView({ lang }: ReportsViewProps) {
   const [pickerPos, setPickerPos] = useState<[number, number]>([12.7855, 45.0187]); // Aden default
   // Delete confirmation dialog (doctor or client)
   const [confirmDelete, setConfirmDelete] = useState<{ kind: 'doctor' | 'client'; id: string; name: string } | null>(null);
+  // Center ↔ doctors linking page (full page, opened by the ربط button)
+  const [linkingCenter, setLinkingCenter] = useState<string | null>(null);
+  const [docSearchQuery, setDocSearchQuery] = useState('');
+  const [pendingDoctors, setPendingDoctors] = useState<string[]>([]);
+  const [centerLinkSaved, setCenterLinkSaved] = useState(false);
 
   // Client modal
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -899,6 +904,183 @@ export default function ReportsView({ lang }: ReportsViewProps) {
      FULL-PAGE: Client add/edit form (replaces the old popup modal)
      Includes the "Drag pin on map" button that opens the map picker page.
      ===================================================================== */
+  /* =====================================================================
+     FULL-PAGE: Center ↔ Doctors linking (ربط)
+     Opened by the "ربط" button next to each center/client. Search doctors
+     (dropdown on focus or after 3 letters), pick multiple, save links.
+     ===================================================================== */
+  if (linkingCenter) {
+    const q = docSearchQuery.trim().toLowerCase();
+    const docSuggestions = db.doctors
+      .map((d) => d.name)
+      .filter((n) => !pendingDoctors.includes(n))
+      .filter((n) => q.length === 0 || n.toLowerCase().includes(q))
+      .slice(0, 10);
+
+    // Doctors already linked to this center
+    const alreadyLinked = db.doctors
+      .filter((d) => {
+        const key = linkingCenter.trim().toLowerCase();
+        return (d.workplace1 || '').trim().toLowerCase() === key ||
+               (d.workplace2 || '').trim().toLowerCase() === key ||
+               (d.workplaceLocations || []).some((l) => l.workplaceName.trim().toLowerCase() === key);
+      })
+      .map((d) => d.name);
+
+    return (
+      <div className="space-y-4 fade-in text-slate-800 max-w-2xl mx-auto pb-20" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight text-slate-900">
+                {lang === 'ar' ? 'ربط الأطباء بالمركز' : 'Link Doctors to Center'}
+              </h2>
+              <p className="text-[11px] text-slate-500">{linkingCenter}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setLinkingCenter(null); setPendingDoctors([]); setDocSearchQuery(''); setCenterLinkSaved(false); }}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <ArrowRight className="w-4 h-4" />
+            {lang === 'ar' ? 'رجوع للقائمة' : 'Back to list'}
+          </button>
+        </div>
+
+        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-6 space-y-5">
+          {/* Center banner */}
+          <div className="bg-gradient-to-l from-emerald-600 to-teal-600 rounded-2xl p-4 text-white flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center font-extrabold text-lg">
+              {linkingCenter.charAt(0)}
+            </div>
+            <div>
+              <div className="font-extrabold text-sm">{linkingCenter}</div>
+              <div className="text-[11px] text-emerald-100">
+                {lang === 'ar' ? `${alreadyLinked.length} طبيب مرتبط حالياً` : `${alreadyLinked.length} doctor(s) currently linked`}
+              </div>
+            </div>
+          </div>
+
+          {/* Already linked doctors */}
+          {alreadyLinked.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[10px] font-bold text-slate-400">
+                {lang === 'ar' ? 'الأطباء المرتبطون حالياً بهذا المركز:' : 'Doctors currently linked:'}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {alreadyLinked.map((n) => (
+                  <span key={n} className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold">
+                    <Stethoscope className="w-3 h-3 text-emerald-500" />
+                    {n}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Doctor search with dropdown (on focus or 3+ letters) */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-600 block">
+              {lang === 'ar' ? 'ابحث باسم الطبيب (أو اكتب أول 3 أحرف):' : 'Search doctor name (or type first 3 letters):'}
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={docSearchQuery}
+                onChange={(e) => setDocSearchQuery(e.target.value)}
+                onFocus={() => setDocSearchQuery(docSearchQuery)}
+                placeholder={lang === 'ar' ? 'اكتب اسم الطبيب...' : 'Type doctor name...'}
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+              />
+              {docSuggestions.length > 0 && (
+                <div className="absolute z-30 w-full bg-white border border-slate-200 rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-50">
+                  {docSuggestions.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => {
+                        setPendingDoctors([...pendingDoctors, name]);
+                        setDocSearchQuery('');
+                      }}
+                      className="w-full text-right px-3.5 py-2.5 text-xs hover:bg-emerald-50 text-slate-700 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Stethoscope className="w-3 h-3 text-emerald-400 shrink-0" />
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Pending selected doctors (multiple allowed) */}
+          {pendingDoctors.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[10px] font-bold text-emerald-600">
+                {lang === 'ar' ? 'الأطباء المختارون للربط بهذا المركز:' : 'Doctors selected to link:'}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {pendingDoctors.map((n, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold">
+                    <Stethoscope className="w-3 h-3" />
+                    {n}
+                    <button
+                      type="button"
+                      onClick={() => setPendingDoctors(pendingDoctors.filter((_, x) => x !== i))}
+                      className="text-emerald-400 hover:text-rose-500 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {centerLinkSaved && (
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2.5">
+              <Check className="w-4 h-4" />
+              {lang === 'ar'
+                ? 'تم ربط الأطباء بالمركز بنجاح وتحديث بياناتهم في جميع صفحات التطبيق!'
+                : 'Doctors linked to the center successfully and updated across all app pages!'}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => { setLinkingCenter(null); setPendingDoctors([]); setDocSearchQuery(''); setCenterLinkSaved(false); }}
+              className="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              {lang === 'ar' ? 'إغلاق' : 'Close'}
+            </button>
+            <button
+              type="button"
+              disabled={pendingDoctors.length === 0}
+              onClick={() => {
+                // Link every selected doctor to this center — updates
+                // workplace1/2 + workplaceLocations with pinned coordinates,
+                // reflected instantly in maps, reports, visit logs etc.
+                pendingDoctors.forEach((docName) => linkDoctorToWorkplace(docName, linkingCenter));
+                setPendingDoctors([]);
+                setCenterLinkSaved(true);
+                setDb(getInitialState());
+              }}
+              className="px-6 py-2.5 bg-emerald-600 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20 cursor-pointer flex items-center gap-1.5"
+            >
+              <Check className="w-3.5 h-3.5" />
+              {lang === 'ar' ? 'حفظ الربط' : 'Save Links'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isClientModalOpen) {
     return (
       <div className="space-y-4 fade-in text-slate-800 max-w-2xl mx-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -1872,6 +2054,18 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                         {lang === 'ar' ? 'تعديل' : 'Edit'}
                       </button>
                       <button
+                        onClick={() => {
+                          setLinkingCenter(client.name);
+                          setPendingDoctors([]);
+                          setDocSearchQuery('');
+                          setCenterLinkSaved(false);
+                        }}
+                        className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                      >
+                        <Stethoscope className="w-3 h-3" />
+                        {lang === 'ar' ? 'ربط' : 'Link'}
+                      </button>
+                      <button
                         onClick={() => setConfirmDelete({ kind: 'client', id: client.id, name: client.name })}
                         className="flex items-center gap-1.5 text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
                       >
@@ -1919,23 +2113,37 @@ export default function ReportsView({ lang }: ReportsViewProps) {
 
                   <div className="flex items-center justify-between pt-2 border-t border-amber-100/50">
                     <span className="text-[9px] text-slate-400 font-mono">#{clientsData.length + wIdx + 1}</span>
-                    <button
-                      onClick={() => {
-                        // Promote this workplace into a fully editable registered client
-                        setEditingClient(null);
-                        setEditClientFields({
-                          name: wp.name,
-                          category: (lang === 'ar' ? 'مستشفى' : 'Hospital') as ClientCategory,
-                          latitude: typeof wp.latitude === 'number' ? wp.latitude : undefined,
-                          longitude: typeof wp.longitude === 'number' ? wp.longitude : undefined,
-                        });
-                        setIsClientModalOpen(true);
-                      }}
-                      className="flex items-center gap-1.5 text-emerald-700 bg-emerald-100 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
-                    >
-                      <ArrowRight className="w-3 h-3" />
-                      {lang === 'ar' ? 'تحويل لعميل' : 'Convert to Client'}
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => {
+                          setLinkingCenter(wp.name);
+                          setPendingDoctors([]);
+                          setDocSearchQuery('');
+                          setCenterLinkSaved(false);
+                        }}
+                        className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                      >
+                        <Stethoscope className="w-3 h-3" />
+                        {lang === 'ar' ? 'ربط' : 'Link'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Promote this workplace into a fully editable registered client
+                          setEditingClient(null);
+                          setEditClientFields({
+                            name: wp.name,
+                            category: (lang === 'ar' ? 'مستشفى' : 'Hospital') as ClientCategory,
+                            latitude: typeof wp.latitude === 'number' ? wp.latitude : undefined,
+                            longitude: typeof wp.longitude === 'number' ? wp.longitude : undefined,
+                          });
+                          setIsClientModalOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 text-emerald-700 bg-emerald-100 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                      >
+                        <ArrowRight className="w-3 h-3" />
+                        {lang === 'ar' ? 'تحويل لعميل' : 'Convert to Client'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

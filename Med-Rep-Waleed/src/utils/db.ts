@@ -497,7 +497,17 @@ export function deleteClient(clientId: string): boolean {
   const state = getInitialState();
   const index = state.clients.findIndex((c) => c.id === clientId);
   if (index === -1) return false;
+  const clientName = (state.clients[index].name || '').trim();
   state.clients.splice(index, 1);
+
+  // PERMANENT DELETE: also remove the matching workplace entry, so the client
+  // never reappears in the list as a "convert to client" workplace row.
+  if (clientName) {
+    state.workplaces = state.workplaces.filter(
+      (w) => w.name.trim().toLowerCase() !== clientName.toLowerCase()
+    );
+  }
+
   saveState(state);
   return true;
 }
@@ -1291,6 +1301,34 @@ export function addClient(clientPayload: Omit<Client, 'id'>): Client {
   const id = `client-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
   const newClient: Client = { ...clientPayload, id };
   state.clients.push(newClient);
+
+  // SYNC: every client is also registered as a WORKPLACE so its name appears
+  // instantly in ALL workplace input lists across the app (visit form,
+  // weekly plan autocomplete, doctor linking...) with the saved coordinates,
+  // enabling real GPS-verified visit logging.
+  const cleanName = (newClient.name || '').trim();
+  if (cleanName) {
+    const existingWp = state.workplaces.find(
+      (w) => w.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    const hasCoords = typeof newClient.locationLatitude === 'number' && typeof newClient.locationLongitude === 'number';
+    if (existingWp) {
+      if (hasCoords) {
+        existingWp.latitude = newClient.locationLatitude!;
+        existingWp.longitude = newClient.locationLongitude!;
+        existingWp.locationPinned = true;
+      }
+    } else {
+      state.workplaces.push({
+        id: `work-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: cleanName,
+        latitude: hasCoords ? newClient.locationLatitude! : null,
+        longitude: hasCoords ? newClient.locationLongitude! : null,
+        locationPinned: hasCoords,
+      });
+    }
+  }
+
   saveState(state);
   return newClient;
 }
@@ -1299,8 +1337,35 @@ export function updateClient(clientId: string, updates: Partial<Client>): Client
   const state = getInitialState();
   const index = state.clients.findIndex(c => c.id === clientId);
   if (index === -1) return null;
+  const oldName = (state.clients[index].name || '').trim();
   const updatedClient = { ...state.clients[index], ...updates };
   state.clients[index] = updatedClient;
+
+  // SYNC: keep the matching workplace name & coordinates aligned with the
+  // updated client so all app pages stay consistent.
+  const newName = (updatedClient.name || '').trim();
+  const hasCoords = typeof updatedClient.locationLatitude === 'number' && typeof updatedClient.locationLongitude === 'number';
+  const wp = state.workplaces.find(
+    (w) => w.name.trim().toLowerCase() === oldName.toLowerCase() ||
+           w.name.trim().toLowerCase() === newName.toLowerCase()
+  );
+  if (wp) {
+    wp.name = newName || wp.name;
+    if (hasCoords) {
+      wp.latitude = updatedClient.locationLatitude!;
+      wp.longitude = updatedClient.locationLongitude!;
+      wp.locationPinned = true;
+    }
+  } else if (newName) {
+    state.workplaces.push({
+      id: `work-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      name: newName,
+      latitude: hasCoords ? updatedClient.locationLatitude! : null,
+      longitude: hasCoords ? updatedClient.locationLongitude! : null,
+      locationPinned: hasCoords,
+    });
+  }
+
   saveState(state);
   return updatedClient;
 }

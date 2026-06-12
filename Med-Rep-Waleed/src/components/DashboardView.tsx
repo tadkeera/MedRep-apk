@@ -37,7 +37,15 @@ const AlarmCard: React.FC<{ alarm: GuardrailAlarm; lang: 'ar' | 'en' }> = ({ ala
 export default function DashboardView({ lang }: DashboardViewProps) {
   const [db, setDb] = useState(getInitialState());
   const [alarms, setAlarms] = useState<GuardrailAlarm[]>([]);
-  const [subView, setSubView] = useState<'main' | 'stock' | 'security'>('main');
+  const [subView, setSubView] = useState<'main' | 'stock' | 'security' | 'route'>('main');
+  // Route-compliance analysis page state
+  const [raDateFrom, setRaDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 28);
+    return d.toISOString().substring(0, 10);
+  });
+  const [raDateTo, setRaDateTo] = useState(() => new Date().toISOString().substring(0, 10));
+  const [raReport, setRaReport] = useState<string | null>(null);
+  const [raLoading, setRaLoading] = useState(false);
 
   useEffect(() => {
     // Reload database state
@@ -351,6 +359,299 @@ export default function DashboardView({ lang }: DashboardViewProps) {
 
   const stockAlertsCount = sparseStockList.length + batchExpiryDetails.length;
   const securityAlertsCount = alarms.length + neglectedClassADocs.length;
+
+  /* =====================================================================
+     FULL-PAGE: Route compliance analysis (نسبة الالتزام بخط السير)
+     Opened by tapping the compliance card. Date filters + saved plans +
+     monthly (4-week) plan analysis with a detailed local report.
+     ===================================================================== */
+  if (subView === 'route') {
+    const ar = lang === 'ar';
+
+    // Saved plans within selected range (or all if none in range)
+    const allCycles = db.weeklyCycles || [];
+    const visitsInRange = db.visits.filter(
+      (v) => v.visitDate >= raDateFrom && v.visitDate <= raDateTo
+    );
+
+    // Helper: compliance for one cycle
+    const cycleCompliance = (cycle: typeof allCycles[0]) => {
+      const cVisits = db.visits.filter((v) => v.visitDate >= cycle.dateFrom && v.visitDate <= cycle.dateTo);
+      let matches = 0;
+      const missedByDay: { day: string; missed: string[] }[] = [];
+      cycle.plans.forEach((p) => {
+        const planned = [...p.morning.workplaces, ...p.evening.workplaces];
+        if (!planned.length) return;
+        const dayVisits = cVisits.filter(
+          (v) => new Date(v.visitDate).toLocaleDateString('en-US', { weekday: 'long' }) === p.day
+        );
+        const visitedNames = new Set(dayVisits.map((v) => v.workplaceName.trim().toLowerCase()));
+        const missed = planned.filter((w) => !visitedNames.has(w.trim().toLowerCase()));
+        if (missed.length) missedByDay.push({ day: p.day, missed });
+      });
+      cVisits.forEach((v) => {
+        const dayName = new Date(v.visitDate).toLocaleDateString('en-US', { weekday: 'long' });
+        const planForDay = cycle.plans.find((p) => p.day === dayName);
+        if (planForDay) {
+          const scheduled = planForDay.morning.workplaces.some((w) => w.toLowerCase() === v.workplaceName.toLowerCase()) ||
+                            planForDay.evening.workplaces.some((w) => w.toLowerCase() === v.workplaceName.toLowerCase());
+          if (scheduled) matches++;
+        }
+      });
+      const pct = cVisits.length ? Math.round((matches / cVisits.length) * 100) : 0;
+      return { pct, cVisits, missedByDay };
+    };
+
+    const dayAr: Record<string, string> = {
+      Saturday: 'السبت', Sunday: 'الأحد', Monday: 'الإثنين',
+      Tuesday: 'الثلاثاء', Wednesday: 'الأربعاء', Thursday: 'الخميس', Friday: 'الجمعة',
+    };
+
+    const runAnalysis = () => {
+      setRaLoading(true);
+      setRaReport(null);
+      setTimeout(() => {
+        const L: string[] = [];
+        const cyclesInRange = allCycles.filter((c) => c.dateTo >= raDateFrom && c.dateFrom <= raDateTo);
+        const targetCycles = cyclesInRange.length ? cyclesInRange.slice(0, 4) : allCycles.slice(0, 4);
+
+        L.push(ar ? `📊 التقرير التحليلي الشامل لخط السير والالتزام` : `📊 Comprehensive Route Compliance Analysis`);
+        L.push(ar
+          ? `الفترة: ${raDateFrom} ← ${raDateTo} • خطط محللة: ${targetCycles.length} • زيارات الفترة: ${visitsInRange.length}`
+          : `Period: ${raDateFrom} → ${raDateTo} • Plans analyzed: ${targetCycles.length} • Visits: ${visitsInRange.length}`);
+        L.push('');
+
+        if (!targetCycles.length) {
+          L.push(ar ? '⚠️ لا توجد خطط أسبوعية محفوظة للتحليل. احفظ خططك من صفحة الخطة الأسبوعية أولاً.' : '⚠️ No saved weekly plans to analyze.');
+        }
+
+        // ---- Per-cycle (week) analysis ----
+        let pctSum = 0;
+        const allMissedCenters = new Map<string, number>();
+        targetCycles.forEach((cycle, ci) => {
+          const { pct, cVisits, missedByDay } = cycleCompliance(cycle);
+          pctSum += pct;
+          L.push(ar
+            ? `🗓️ الأسبوع ${ci + 1}: (${cycle.dateFrom} ← ${cycle.dateTo})`
+            : `🗓️ Week ${ci + 1}: (${cycle.dateFrom} → ${cycle.dateTo})`);
+          L.push(ar
+            ? `  • نسبة الالتزام: ${pct}% • الزيارات المنفذة: ${cVisits.length}`
+            : `  • Compliance: ${pct}% • Visits done: ${cVisits.length}`);
+          if (missedByDay.length === 0) {
+            L.push(ar ? '  ✓ لا يوجد تقصير — كل المراكز المخططة تمت زيارتها.' : '  ✓ No gaps — all planned centers were visited.');
+          } else {
+            L.push(ar ? '  ⚠️ التقصير اليومي (مراكز مخططة لم تُزر):' : '  ⚠️ Daily gaps (planned centers not visited):');
+            missedByDay.forEach(({ day, missed }) => {
+              L.push(`    - ${ar ? dayAr[day] || day : day}: ${missed.join('، ')}`);
+              missed.forEach((m) => allMissedCenters.set(m, (allMissedCenters.get(m) || 0) + 1));
+            });
+          }
+          L.push('');
+        });
+
+        const avgPct = targetCycles.length ? Math.round(pctSum / targetCycles.length) : 0;
+
+        // ---- Most-missed centers ----
+        if (allMissedCenters.size) {
+          L.push(ar ? '🏥 المراكز الأكثر إهمالاً خلال الفترة:' : '🏥 Most-missed centers:');
+          [...allMissedCenters.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([name, cnt]) => {
+            L.push(`  • ${name} — ${ar ? `أُهمل ${cnt} مرة` : `missed ${cnt} time(s)`}`);
+          });
+          L.push('');
+        }
+
+        // ---- Year-to-date visits trend (since start of 2026) ----
+        const ytdVisits = db.visits.filter((v) => v.visitDate >= '2026-01-01');
+        const byMonth = new Map<string, number>();
+        ytdVisits.forEach((v) => {
+          const m = v.visitDate.substring(0, 7);
+          byMonth.set(m, (byMonth.get(m) || 0) + 1);
+        });
+        L.push(ar ? '📈 تحليل الزيارات منذ بداية 2026:' : '📈 Visit trend since Jan 2026:');
+        L.push(ar ? `  • إجمالي زيارات 2026: ${ytdVisits.length}` : `  • Total 2026 visits: ${ytdVisits.length}`);
+        [...byMonth.entries()].sort().forEach(([m, c]) => L.push(`  • ${m}: ${c} ${ar ? 'زيارة' : 'visits'}`));
+        L.push('');
+
+        // ---- Doctors needing visits (linked via workplaces) ----
+        const now = new Date();
+        const needDocs = db.doctors
+          .map((d) => {
+            const dv = db.visits.filter((v) => v.doctorName === d.name);
+            const lastDate = dv.length ? dv.map((v) => v.visitDate).sort().slice(-1)[0] : null;
+            const daysSince = lastDate ? Math.round((now.getTime() - new Date(lastDate).getTime()) / 86400000) : null;
+            const target = d.classRating === 'A' ? 4 : d.classRating === 'B' ? 2 : 1;
+            const last30 = dv.filter((v) => (now.getTime() - new Date(v.visitDate).getTime()) / 86400000 <= 30).length;
+            return { d, daysSince, deficit: Math.max(0, target - last30) };
+          })
+          .filter((x) => x.deficit > 0 || x.daysSince === null || (x.daysSince ?? 0) > 21)
+          .sort((a, b) => (b.d.classRating === 'A' ? 1 : 0) - (a.d.classRating === 'A' ? 1 : 0))
+          .slice(0, 10);
+
+        L.push(ar ? '👨‍⚕️ أطباء يحتاجون زيارات (مرتبطون بأماكن العمل):' : '👨‍⚕️ Doctors needing visits (linked to workplaces):');
+        if (!needDocs.length) {
+          L.push(ar ? '  ✓ جميع الأطباء ضمن المعدل المستهدف.' : '  ✓ All doctors are within target frequency.');
+        } else {
+          needDocs.forEach(({ d, daysSince, deficit }) => {
+            const wps = [d.workplace1, d.workplace2, ...((d.workplaceLocations || []).map((l) => l.workplaceName))]
+              .filter((v, i, a) => v && a.indexOf(v) === i).join('، ') || (ar ? 'بدون مكان عمل' : 'no workplace');
+            const why = daysSince === null ? (ar ? 'لم يُزر إطلاقاً' : 'never visited') : (ar ? `آخر زيارة منذ ${daysSince} يوم • نقص ${deficit} زيارة` : `last ${daysSince}d ago • ${deficit} short`);
+            L.push(`  • ${d.name} (Class ${d.classRating}) — ${why} | 🏥 ${wps}`);
+          });
+        }
+        L.push('');
+
+        // ---- Recommendations for next week ----
+        L.push(ar ? '💡 توصيات خطة الأسبوع القادم (لردم فجوة الالتزام):' : '💡 Next-week plan recommendations:');
+        let recIdx = 1;
+        if (allMissedCenters.size) {
+          const top = [...allMissedCenters.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n]) => n);
+          L.push(ar
+            ? `  ${recIdx++}. أدرج المراكز المهملة في بداية أيام الأسبوع القادم: ${top.join('، ')}.`
+            : `  ${recIdx++}. Schedule the most-missed centers early next week: ${top.join(', ')}.`);
+        }
+        if (avgPct < 70 && targetCycles.length) {
+          L.push(ar
+            ? `  ${recIdx++}. متوسط الالتزام ${avgPct}% منخفض — قلّص عدد المحطات اليومية المخططة لتكون واقعية وقابلة للتنفيذ.`
+            : `  ${recIdx++}. Average compliance ${avgPct}% is low — reduce daily planned stops to a realistic number.`);
+        } else if (targetCycles.length) {
+          L.push(ar
+            ? `  ${recIdx++}. متوسط الالتزام ${avgPct}% — حافظ على نفس هيكل الخطة مع تحسين الأيام الأضعف.`
+            : `  ${recIdx++}. Average compliance ${avgPct}% — keep the structure, improve the weakest days.`);
+        }
+        if (needDocs.length) {
+          const docWps = new Set<string>();
+          needDocs.forEach(({ d }) => { if (d.workplace1) docWps.add(d.workplace1); });
+          if (docWps.size) {
+            L.push(ar
+              ? `  ${recIdx++}. ضمّن أماكن عمل الأطباء المحتاجين للزيارة في الخطة: ${[...docWps].slice(0, 4).join('، ')}.`
+              : `  ${recIdx++}. Include workplaces of doctors needing visits: ${[...docWps].slice(0, 4).join(', ')}.`);
+          }
+        }
+        L.push(ar
+          ? `  ${recIdx++}. ثبّت إحداثيات كل مكان عمل جديد فور أول زيارة لضمان دقة احتساب الالتزام والموقع.`
+          : `  ${recIdx++}. Pin every new workplace's coordinates on first visit for accurate compliance metrics.`);
+        L.push(ar
+          ? `  ${recIdx}. احفظ خطة كل أسبوع قبل بدايته (السبت) لتفعيل قياس الالتزام التلقائي.`
+          : `  ${recIdx}. Save each week's plan before Saturday to enable automatic compliance tracking.`);
+
+        setRaReport(L.join('\n'));
+        setRaLoading(false);
+      }, 700);
+    };
+
+    return (
+      <div className="space-y-5 fade-in text-right" dir={ar ? 'rtl' : 'ltr'}>
+        {/* Header with Back Button */}
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSubView('main')}
+              className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl transition-colors cursor-pointer flex items-center justify-center w-10 h-10 shrink-0"
+              title={ar ? 'العودة للوحة التحكم الرئيسية' : 'Back to Dashboard'}
+            >
+              <ArrowRight className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 leading-tight">
+                {ar ? 'تحليل الالتزام بخط السير والموقع' : 'Route Compliance Analysis'}
+              </h1>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                {ar ? 'متابعة الخطط المحفوظة • تحليل الزيارات • توصيات الأسبوع القادم' : 'Saved plans • visit analysis • next-week recommendations'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Date filters + analyze button */}
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-600">{ar ? 'من تاريخ' : 'From'}</label>
+              <input
+                type="date"
+                value={raDateFrom}
+                onChange={(e) => setRaDateFrom(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs outline-none font-mono focus:border-amber-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-600">{ar ? 'إلى تاريخ' : 'To'}</label>
+              <input
+                type="date"
+                value={raDateTo}
+                onChange={(e) => setRaDateTo(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs outline-none font-mono focus:border-amber-500"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={runAnalysis}
+              disabled={raLoading}
+              className="px-5 py-2.5 bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-md shadow-amber-500/25 transition-all cursor-pointer"
+            >
+              {raLoading
+                ? (<><Clock className="w-4 h-4 animate-spin" />{ar ? 'جاري تحليل الخطط...' : 'Analyzing plans...'}</>)
+                : (<><TrendingUp className="w-4 h-4" />{ar ? 'تحليل الخطط (4 أسابيع)' : 'Analyze Plans (4 weeks)'}</>)}
+            </button>
+          </div>
+        </div>
+
+        {/* Saved weekly plans within scope */}
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-3">
+          <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-amber-500" />
+            {ar ? 'الخطط الأسبوعية المحفوظة' : 'Saved Weekly Plans'}
+            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-extrabold">{allCycles.length}</span>
+          </h3>
+          {allCycles.length === 0 ? (
+            <div className="p-6 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-xs">
+              {ar ? 'لا توجد خطط محفوظة — احفظ خططك من صفحة الخطة الأسبوعية.' : 'No saved plans yet.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              {allCycles.slice(0, 8).map((cycle, idx) => {
+                const { pct, cVisits } = cycleCompliance(cycle);
+                return (
+                  <div key={cycle.id} className="bg-slate-50/60 border border-slate-150 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono font-extrabold text-slate-700">{cycle.dateFrom}</span>
+                      {idx === 0 && (
+                        <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[8.5px] font-extrabold">
+                          {ar ? 'النشطة' : 'Active'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-lg font-extrabold ${pct >= 70 ? 'text-emerald-600' : pct >= 40 ? 'text-amber-600' : 'text-rose-600'}`}>{pct}%</span>
+                      <span className="text-[9px] text-slate-400 font-bold">{cVisits.length} {ar ? 'زيارة' : 'visits'}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                      <div className={`h-full rounded-full ${pct >= 70 ? 'bg-emerald-500' : pct >= 40 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${pct}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Analysis report output */}
+        {raReport && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-slate-900 text-slate-100 rounded-2xl p-5 border border-slate-800 text-xs leading-relaxed space-y-3"
+          >
+            <div className="text-[10px] text-amber-300 font-mono flex items-center justify-between border-b border-slate-800 pb-2">
+              <span>⚡ {ar ? 'التقرير التحليلي المفصل لخط السير' : 'Detailed Route Analysis Report'}</span>
+              <span>{ar ? 'محرك التحليل المحلي' : 'Local analytics engine'}</span>
+            </div>
+            <div className="whitespace-pre-line text-slate-200 max-h-[32rem] overflow-y-auto pr-1">{raReport}</div>
+          </motion.div>
+        )}
+      </div>
+    );
+  }
 
   if (subView === 'stock') {
     return (
@@ -922,11 +1223,20 @@ export default function DashboardView({ lang }: DashboardViewProps) {
           </div>
         </div>
 
-        {/* Route compliance and unplanned deviations */}
-        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
-          <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-slate-500" />
-            {t.kpiRoute}
+        {/* Route compliance and unplanned deviations — tap to open the full analysis page */}
+        <div
+          onClick={() => setSubView('route')}
+          className="bg-white border border-slate-100 hover:border-amber-300 rounded-2xl p-5 shadow-sm hover:shadow-md space-y-4 cursor-pointer transition-all duration-200 group"
+          title={lang === 'ar' ? 'اضغط لفتح صفحة تحليل الالتزام بخط السير' : 'Tap to open the route compliance analysis page'}
+        >
+          <h3 className="font-semibold text-slate-800 text-sm flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-slate-500" />
+              {t.kpiRoute}
+            </span>
+            <span className="text-[9px] bg-amber-50 text-amber-700 px-2 py-1 rounded-lg font-extrabold opacity-0 group-hover:opacity-100 transition-opacity">
+              {lang === 'ar' ? 'اضغط للتحليل ←' : 'Tap to analyze →'}
+            </span>
           </h3>
           <div className="flex flex-col items-center justify-center pt-2 pb-4">
             <div className="relative w-32 h-32">
