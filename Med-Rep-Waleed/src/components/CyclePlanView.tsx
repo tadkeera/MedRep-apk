@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { getInitialState, saveState, saveVirtualFile } from '../utils/db';
+import { getInitialState, saveState, saveVirtualFile, registerNewEntity } from '../utils/db';
 import { WeeklyCycle, DailyCyclePlan } from '../types';
 import { Calendar, Building, Plus, Trash, Check, Download, FileText, ArrowLeftRight, Printer, Sun, Moon, MapPin, Sparkles } from 'lucide-react';
 
@@ -44,6 +44,18 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 
   // Inline workplace add state
   const [inputMap, setInputMap] = useState<{ [key: string]: string }>({});
+  // Autocomplete dropdown: which input is focused + live suggestions
+  const [focusedInputKey, setFocusedInputKey] = useState<string | null>(null);
+
+  // Suggestions from saved workplaces (active after typing 3+ characters)
+  const getWorkplaceSuggestions = (key: string): string[] => {
+    const q = (inputMap[key] || '').trim().toLowerCase();
+    if (q.length < 3) return [];
+    return db.workplaces
+      .map((w) => w.name)
+      .filter((n) => n && n.toLowerCase().includes(q))
+      .slice(0, 8);
+  };
 
   useEffect(() => {
     const currentState = getInitialState();
@@ -97,17 +109,29 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
     },
   }[lang];
 
-  const handleAddWorkplace = (day: string, shift: 'morning' | 'evening') => {
+  const handleAddWorkplace = (day: string, shift: 'morning' | 'evening', presetName?: string) => {
     const key = `${day}-${shift}`;
-    const name = inputMap[key];
+    const name = presetName ?? inputMap[key];
     if (!name || !name.trim()) return;
+    const cleanName = name.trim();
+
+    // If the workplace isn't registered in the app yet, save it to the
+    // workplaces list automatically so it appears everywhere (visits,
+    // clients list, future autocomplete).
+    const exists = db.workplaces.some(
+      (w) => w.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    if (!exists) {
+      registerNewEntity('workplace', cleanName);
+      setDb(getInitialState());
+    }
 
     const updated = plans.map(p => {
       if (p.day === day) {
         return {
           ...p,
           [shift]: {
-            workplaces: [...p[shift].workplaces, name.trim()]
+            workplaces: [...p[shift].workplaces, cleanName]
           }
         };
       }
@@ -119,6 +143,7 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       ...inputMap,
       [key]: ''
     });
+    setFocusedInputKey(null);
   };
 
   const handleRemoveWorkplace = (day: string, shift: 'morning' | 'evening', idx: number) => {
@@ -574,24 +599,42 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 
                   {/* Morning Shift input & list */}
                   <td className="px-6 py-6 vertical-align-top space-y-4 border-l border-slate-100/60">
-                    {/* Inline add workspace */}
-                    <div className="flex gap-2 max-w-md items-center">
-                      <input
-                        type="text"
-                        placeholder={t.addPlaceholder}
-                        className="flex-1 bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs outline-none font-medium text-slate-800 transition-all shadow-inner"
-                        value={inputMap[`${p.day}-morning`] || ''}
-                        onChange={(e) => setInputMap({ ...inputMap, [`${p.day}-morning`]: e.target.value })}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddWorkplace(p.day, 'morning')}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAddWorkplace(p.day, 'morning')}
-                        className="p-2 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-xl border border-indigo-100 transition-all cursor-pointer flex items-center justify-center shadow-sm font-bold"
-                        title={t.addBtn}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                    {/* Inline add workspace with autocomplete (3+ chars) */}
+                    <div className="relative max-w-md">
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder={t.addPlaceholder}
+                          className="flex-1 bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs outline-none font-medium text-slate-800 transition-all shadow-inner"
+                          value={inputMap[`${p.day}-morning`] || ''}
+                          onChange={(e) => { setInputMap({ ...inputMap, [`${p.day}-morning`]: e.target.value }); setFocusedInputKey(`${p.day}-morning`); }}
+                          onFocus={() => setFocusedInputKey(`${p.day}-morning`)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddWorkplace(p.day, 'morning')}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddWorkplace(p.day, 'morning')}
+                          className="p-2 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-xl border border-indigo-100 transition-all cursor-pointer flex items-center justify-center shadow-sm font-bold"
+                          title={t.addBtn}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {focusedInputKey === `${p.day}-morning` && getWorkplaceSuggestions(`${p.day}-morning`).length > 0 && (
+                        <div className="absolute z-30 w-full bg-white border border-slate-200 rounded-xl mt-1 shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-50">
+                          {getWorkplaceSuggestions(`${p.day}-morning`).map((name) => (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => handleAddWorkplace(p.day, 'morning', name)}
+                              className="w-full text-right px-3.5 py-2.5 text-xs hover:bg-indigo-50 text-slate-700 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
+                              {name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Workplaces display list */}
@@ -627,23 +670,41 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 
                   {/* Evening Shift input & list */}
                   <td className="px-6 py-6 vertical-align-top space-y-4">
-                    <div className="flex gap-2 max-w-md items-center">
-                      <input
-                        type="text"
-                        placeholder={t.addPlaceholder}
-                        className="flex-1 bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs outline-none font-medium text-slate-800 transition-all shadow-inner"
-                        value={inputMap[`${p.day}-evening`] || ''}
-                        onChange={(e) => setInputMap({ ...inputMap, [`${p.day}-evening`]: e.target.value })}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddWorkplace(p.day, 'evening')}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAddWorkplace(p.day, 'evening')}
-                        className="p-2 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-xl border border-indigo-100 transition-all cursor-pointer flex items-center justify-center shadow-sm font-bold"
-                        title={t.addBtn}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                    <div className="relative max-w-md">
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder={t.addPlaceholder}
+                          className="flex-1 bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs outline-none font-medium text-slate-800 transition-all shadow-inner"
+                          value={inputMap[`${p.day}-evening`] || ''}
+                          onChange={(e) => { setInputMap({ ...inputMap, [`${p.day}-evening`]: e.target.value }); setFocusedInputKey(`${p.day}-evening`); }}
+                          onFocus={() => setFocusedInputKey(`${p.day}-evening`)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddWorkplace(p.day, 'evening')}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddWorkplace(p.day, 'evening')}
+                          className="p-2 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-xl border border-indigo-100 transition-all cursor-pointer flex items-center justify-center shadow-sm font-bold"
+                          title={t.addBtn}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {focusedInputKey === `${p.day}-evening` && getWorkplaceSuggestions(`${p.day}-evening`).length > 0 && (
+                        <div className="absolute z-30 w-full bg-white border border-slate-200 rounded-xl mt-1 shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-50">
+                          {getWorkplaceSuggestions(`${p.day}-evening`).map((name) => (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => handleAddWorkplace(p.day, 'evening', name)}
+                              className="w-full text-right px-3.5 py-2.5 text-xs hover:bg-indigo-50 text-slate-700 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
+                              {name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-1.5">
