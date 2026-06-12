@@ -10,6 +10,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.util.Base64;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
@@ -43,6 +46,7 @@ public class MainActivity extends Activity {
     private static final String AUTO_STATE_FILE = "medrep_auto_state.json";
 
     private WebView webView;
+    private WebView printWebView; // kept as field so it is not garbage-collected during printing
     private LocalServer server;
     private int serverPort = 0;
     private ValueCallback<Uri[]> filePathCallback;
@@ -288,6 +292,56 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getAppFolderPath() {
             return getAppRoot().getAbsolutePath();
+        }
+
+        /**
+         * NATIVE PRINT: opens the Android system print dialog (printer apps,
+         * Save as PDF, etc.) rendering the given HTML report. Also saves a
+         * copy of the report HTML into /Med Rep/download automatically.
+         */
+        @JavascriptInterface
+        public void printHtml(String base64Utf8Html, String jobName) {
+            try {
+                byte[] bytes = Base64.decode(base64Utf8Html, Base64.DEFAULT);
+                final String html = new String(bytes, StandardCharsets.UTF_8);
+                final String name = (jobName == null || jobName.trim().isEmpty()) ? ("MedRep_Report_" + System.currentTimeMillis()) : jobName;
+
+                // 1) Save a copy directly into /Med Rep/download
+                try {
+                    File saved = writeToFolder("download", sanitize(name) + ".html", bytes);
+                    toast("Saved: " + saved.getAbsolutePath());
+                } catch (Exception ignored) {}
+
+                // 2) Launch the system print dialog on the UI thread
+                runOnUiThread(() -> {
+                    try {
+                        printWebView = new WebView(MainActivity.this);
+                        printWebView.getSettings().setJavaScriptEnabled(false);
+                        printWebView.setWebViewClient(new WebViewClient() {
+                            @Override
+                            public void onPageFinished(WebView view, String url) {
+                                try {
+                                    PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
+                                    PrintDocumentAdapter adapter;
+                                    if (Build.VERSION.SDK_INT >= 21) {
+                                        adapter = view.createPrintDocumentAdapter(name);
+                                    } else {
+                                        adapter = view.createPrintDocumentAdapter();
+                                    }
+                                    pm.print(name, adapter, new PrintAttributes.Builder().build());
+                                } catch (Exception e) {
+                                    toast("Print error: " + e.getMessage());
+                                }
+                            }
+                        });
+                        printWebView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
+                    } catch (Exception e) {
+                        toast("Print error: " + e.getMessage());
+                    }
+                });
+            } catch (Exception e) {
+                toast("Print failed: " + e.getMessage());
+            }
         }
 
         /**

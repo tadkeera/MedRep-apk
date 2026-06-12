@@ -10,6 +10,7 @@ import { FileText, Search, TrendingUp, Sparkles, Download, Printer, Calendar, Lo
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import { jsPDF } from 'jspdf';
+import { printAndSaveReport, cleanReportNotes } from '../utils/printer';
 
 /* Draggable pin + click-to-move helper for the location picker map */
 function LocationPicker({ position, onMove }: { position: [number, number]; onMove: (lat: number, lng: number) => void }) {
@@ -331,13 +332,20 @@ export default function ReportsView({ lang }: ReportsViewProps) {
           <tr>
             <td>${v.visitDate}</td>
             <td>${v.doctorName || (lang === 'ar' ? 'عميل خارجي' : 'External client')}</td>
-            <td style="font-weight: bold; color: #16a34a;">${sInfo?.quantityDistributed || 0} ${lang === 'ar' ? 'وحدة' : 'Units'}</td>
+            <td style="font-weight: bold; color: #16a34a;">${sInfo?.quantityDistributed || 0} ${lang === 'ar' ? 'علبة' : 'Box(es)'}</td>
             <td>${v.workplaceName}</td>
-            <td>${v.notes || '-'}</td>
+            <td>${cleanReportNotes(v.notes) || '-'}</td>
           </tr>
         `;
       }).join('') : `<tr><td colspan="5" style="text-align: center; color: #94a3b8;">${lang === 'ar' ? 'لا توجد بيانات متاحة لهذا الصنف' : 'No entries available.'}</td></tr>`}
     </tbody>
+    <tfoot>
+      <tr style="background: #dbeafe; font-weight: bold; border-top: 3px solid #3b82f6;">
+        <td colspan="2" style="font-weight: bold; color: #1e3a8a;">📦 ${lang === 'ar' ? 'إجمالي العينات المصروفة للفترة المحددة' : 'Total samples dispensed for the selected period'}</td>
+        <td style="font-weight: bold; color: #1d4ed8; font-size: 13px;">${totalSampleDispensed} ${lang === 'ar' ? 'علبة' : 'Box(es)'}</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
   </table>
 </body>
 </html>
@@ -380,7 +388,7 @@ export default function ReportsView({ lang }: ReportsViewProps) {
         <tr>
           <td>${v.visitDate}</td>
           <td>${v.workplaceName}</td>
-          <td>${v.notes || '-'}</td>
+          <td>${cleanReportNotes(v.notes) || '-'}</td>
         </tr>
       `).join('') : `<tr><td colspan="3" style="text-align: center; color: #94a3b8;">${lang === 'ar' ? 'لم يسجل زيارات في هذه الفترة' : 'No records.'}</td></tr>`}
     </tbody>
@@ -502,42 +510,26 @@ export default function ReportsView({ lang }: ReportsViewProps) {
       });
       alert(t.exportSuccess);
     } else if (format === 'print') {
-      // High-Fidelity Printable popup which lets user Save directly to PDF with colors and fonts
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>${docTitle}</title>
-              <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
-              <style>
-                body { margin: 0; padding: 25px; font-family: 'Cairo', sans-serif; background-color: #ffffff; }
-                @media print {
-                  body { padding: 0; }
-                  .no-print-btn { display: none !important; }
-                }
-              </style>
-            </head>
-            <body>
-              <div style="max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;" class="no-print-btn">
-                  <button onclick="window.print();" style="background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-family: 'Cairo', sans-serif; font-size: 13px;">
-                    ${lang === 'ar' ? '🖨️ ابدأ الطباعة الملونة / حفظ كـ PDF فوري' : '🖨️ Direct Print / Save to PDF'}
-                  </button>
-                  <span style="font-size: 11px; color: #94a3b8; font-family: monospace;">Med Rep Diagnostic Engine</span>
-                </div>
-                ${exportHtml}
-              </div>
-              <script>
-                window.onload = function() {
-                  setTimeout(function() { window.print(); }, 500);
-                }
-              </script>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      }
+      // Unified pipeline: opens the PHONE's system print sheet (printer apps,
+      // Save as PDF, ...) via the native bridge AND saves a copy of the
+      // report into /Med Rep/download automatically.
+      const fullPrintableHtml = `
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>${docTitle}</title>
+            <style>
+              body { margin: 0; padding: 25px; font-family: 'Cairo', 'Arial', sans-serif; background-color: #ffffff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              @media print { body { padding: 0; } }
+            </style>
+          </head>
+          <body>
+            <div style="max-width: 800px; margin: 0 auto;">
+              ${exportHtml}
+            </div>
+          </body>
+        </html>`;
+      printAndSaveReport(fullPrintableHtml, docTitle, lang);
     } else if (format === 'pdf') {
       // Real binary pdf using downloaded jsPDF bundle library
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -621,7 +613,7 @@ export default function ReportsView({ lang }: ReportsViewProps) {
           }
           pdf.text(String(v.visitDate), 15, rowY);
           pdf.text(String(v.workplaceName).substring(0, 32), 40, rowY);
-          pdf.text(String(v.notes || 'No notes').substring(0, 48), 110, rowY);
+          pdf.text(String(cleanReportNotes(v.notes) || 'No notes').substring(0, 48), 110, rowY);
           rowY += 9;
         });
       } else if (reportType === 'doctorsList' as any) {
@@ -1392,8 +1384,8 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                             {distribution?.quantityDistributed} {lang === 'ar' ? 'علبة' : 'box(es)'}
                           </td>
                           <td className="px-4 py-3 font-medium">{v.workplaceName}</td>
-                          <td className="px-4 py-3 text-slate-400 font-light truncate max-w-sm" title={v.notes}>
-                            {v.notes || '---'}
+                          <td className="px-4 py-3 text-slate-400 font-light truncate max-w-sm" title={cleanReportNotes(v.notes)}>
+                            {cleanReportNotes(v.notes) || '---'}
                           </td>
                         </tr>
                       );
@@ -1500,7 +1492,7 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                           <tr key={v.id} className="hover:bg-slate-50/40">
                             <td className="px-4 py-3 font-mono font-medium">{v.visitDate}</td>
                             <td className="px-4 py-3 font-medium text-slate-900">{v.workplaceName}</td>
-                            <td className="px-4 py-3 text-slate-500 font-light max-w-md antialiased">{v.notes || '---'}</td>
+                            <td className="px-4 py-3 text-slate-500 font-light max-w-md antialiased">{cleanReportNotes(v.notes) || '---'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1602,9 +1594,9 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                               ? `${v.workplaceName} • Class ${v.doctorClass || 'B'}` 
                               : (lang === 'ar' ? 'عميل صيدلية طبيعية' : 'Clinical Pharmacy Customer')}
                           </div>
-                          {v.notes && (
+                          {cleanReportNotes(v.notes) && (
                             <div className="text-[9px] text-slate-500 bg-slate-50/90 py-1 px-2 rounded mt-1 italic border-r border-purple-300 max-w-xs truncate">
-                              "{v.notes}"
+                              "{cleanReportNotes(v.notes)}"
                             </div>
                           )}
                         </td>

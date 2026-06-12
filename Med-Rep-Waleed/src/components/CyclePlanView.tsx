@@ -6,7 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { getInitialState, saveState, saveVirtualFile, registerNewEntity } from '../utils/db';
 import { WeeklyCycle, DailyCyclePlan } from '../types';
-import { Calendar, Building, Plus, Trash, Check, Download, FileText, ArrowLeftRight, Printer, Sun, Moon, MapPin, Sparkles } from 'lucide-react';
+import { Calendar, Building, Plus, Trash, Check, Download, FileText, ArrowLeftRight, Printer, Sun, Moon, MapPin, Sparkles, Archive, ArrowRight, Trash2 } from 'lucide-react';
+import { printAndSaveReport } from '../utils/printer';
 
 interface CyclePlanViewProps {
   lang: 'ar' | 'en';
@@ -44,6 +45,8 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 
   // Inline workplace add state
   const [inputMap, setInputMap] = useState<{ [key: string]: string }>({});
+  // Saved plans archive: when set, a full-page view of that saved plan opens
+  const [viewingSavedPlan, setViewingSavedPlan] = useState<WeeklyCycle | null>(null);
   // Autocomplete dropdown: which input is focused + live suggestions
   const [focusedInputKey, setFocusedInputKey] = useState<string | null>(null);
 
@@ -82,7 +85,7 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       eveningShift: 'النوبة المسائية (Evening Shift)',
       addPlaceholder: 'أدخل مستشفى/عيادة...',
       addBtn: 'إضافة لخط السير',
-      savePlan: 'حفظ هيكل الخطة',
+      savePlan: 'حفظ الخطة',
       exportPlan: 'تصدير المستند المعتمد للتحميل',
       exportSuccess: 'تم تصدير الخطة المعتمدة وكتابتها بنجاح داخل مجلد التحميلات الخاص بك: /Med Rep/DOWNLOAD/',
       saveSuccess: 'تم تسوية وتوثيق خطة السير الحالية في الذاكرة المحلية بنجاح!',
@@ -100,7 +103,7 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       eveningShift: 'Evening Shift',
       addPlaceholder: 'Add clinic/workplace...',
       addBtn: 'Add to path',
-      savePlan: 'Save Plan Outline',
+      savePlan: 'Save Plan',
       exportPlan: 'Export Approved Document',
       exportSuccess: 'Approved SFA plan written to storage successfully: /Med Rep/DOWNLOAD/',
       saveSuccess: 'Weekly flight plan logged in local SFA modules!',
@@ -163,31 +166,51 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 
   const handleSavePlanLayout = () => {
     const state = getInitialState();
+    // Upsert by period: if a plan with the same date range exists, update it;
+    // otherwise add a NEW saved plan. The saved/updated plan becomes the
+    // active plan (index 0) used by the dashboard route-compliance metric.
+    const existingIdx = state.weeklyCycles.findIndex(
+      (c) => c.dateFrom === dateFrom && c.dateTo === dateTo
+    );
     const cycle: WeeklyCycle = {
-      id: state.weeklyCycles[0]?.id || `cycle-${Date.now()}`,
+      id: existingIdx >= 0 ? state.weeklyCycles[existingIdx].id : `cycle-${Date.now()}`,
       dateFrom,
       dateTo,
       companyName,
       repName,
       plans,
     };
-
-    // overwrite or push
-    state.weeklyCycles = [cycle];
+    if (existingIdx >= 0) state.weeklyCycles.splice(existingIdx, 1);
+    state.weeklyCycles.unshift(cycle); // newest/active first
     saveState(state);
     setDb(state);
     alert(t.saveSuccess);
   };
 
+  const handleDeleteSavedPlan = (cycleId: string) => {
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه الخطة المحفوظة؟' : 'Delete this saved plan?')) return;
+    const state = getInitialState();
+    state.weeklyCycles = state.weeklyCycles.filter((c) => c.id !== cycleId);
+    saveState(state);
+    setDb(state);
+    if (viewingSavedPlan?.id === cycleId) setViewingSavedPlan(null);
+  };
+
   // Writing full export simulation payload reports to download directories
-  const handleExportPlanDocument = (format: 'html' | 'print') => {
+  const handleExportPlanDocument = (format: 'html' | 'print', cycleOverride?: WeeklyCycle) => {
+    // Use either the live editor state or a saved (archived) plan
+    const cRepName = cycleOverride?.repName ?? repName;
+    const cCompanyName = cycleOverride?.companyName ?? companyName;
+    const cDateFrom = cycleOverride?.dateFrom ?? dateFrom;
+    const cDateTo = cycleOverride?.dateTo ?? dateTo;
+    const cPlans = cycleOverride?.plans ?? plans;
     // Generate styled HTML structure for offline share
     const exportHtml = `
 <!DOCTYPE html>
 <html dir="${lang === 'ar' ? 'rtl' : 'ltr'}" lang="${lang}">
 <head>
   <meta charset="UTF-8">
-  <title>الخطة الاسبوعية - ${repName}</title>
+  <title>الخطة الاسبوعية - ${cRepName}</title>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     @page {
@@ -363,13 +386,13 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
   <table class="metadata-table">
     <tr>
       <td class="label">اسم المندوب:</td>
-      <td>${repName}</td>
+      <td>${cRepName}</td>
       <td class="label">التاريخ:</td>
-      <td>من ${dateFrom} إلى ${dateTo}</td>
+      <td>من ${cDateFrom} إلى ${cDateTo}</td>
     </tr>
     <tr>
       <td class="label">الشركة:</td>
-      <td colspan="3">${companyName}</td>
+      <td colspan="3">${cCompanyName}</td>
     </tr>
   </table>
 
@@ -392,7 +415,7 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       </tr>
     </thead>
     <tbody>
-      ${plans.map((p, idxDay) => `
+      ${cPlans.map((p, idxDay) => `
         <tr>
           <td class="day">
             <div class="day-wrapper">
@@ -429,7 +452,7 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
 `;
 
     if (format === 'html') {
-      const fileName = `weekly_cycle_${dateFrom}_to_${dateTo}.html`;
+      const fileName = `weekly_cycle_${cDateFrom}_to_${cDateTo}.html`;
       saveVirtualFile({
         name: fileName,
         size: `${(exportHtml.length / 1024).toFixed(1)} KB`,
@@ -440,21 +463,126 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       });
       alert(t.exportSuccess);
     } else if (format === 'print') {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        // Embed auto-print trigger cleanly at the end of the premium HTML page
-        const printablePayload = exportHtml.replace('</body>', `
-          <script>
-            window.onload = function() {
-              setTimeout(function() { window.print(); }, 400);
-            }
-          <\/script>
-        </body>`);
-        printWindow.document.write(printablePayload);
-        printWindow.document.close();
-      }
+      // Native pipeline: opens the PHONE's system print sheet (printer apps,
+      // Save as PDF...) AND saves a copy directly to /Med Rep/download.
+      printAndSaveReport(exportHtml, `weekly_cycle_${cDateFrom}_to_${cDateTo}`, lang);
     }
   };
+
+  /* =====================================================================
+     FULL-PAGE: Saved plan viewer — opens when a saved plan is tapped from
+     the "الخطط المحفوظة" archive section. Printable from here directly.
+     ===================================================================== */
+  if (viewingSavedPlan) {
+    const sp = viewingSavedPlan;
+    return (
+      <div className="space-y-4 fade-in text-slate-800" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-100 text-indigo-700 rounded-xl">
+              <Archive className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight text-slate-900">
+                {lang === 'ar' ? 'الخطة الأسبوعية المحفوظة' : 'Saved Weekly Plan'}
+              </h2>
+              <p className="text-[11px] text-slate-500 font-mono">
+                {sp.dateFrom} ← {sp.dateTo} • {sp.repName}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleExportPlanDocument('print', sp)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              {lang === 'ar' ? 'طباعة وحفظ PDF ملون' : 'Print / Save PDF'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewingSavedPlan(null)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4" />
+              {lang === 'ar' ? 'رجوع' : 'Back'}
+            </button>
+          </div>
+        </div>
+
+        {/* Plan metadata */}
+        <div className="bg-gradient-to-l from-indigo-600 to-violet-600 rounded-2xl p-5 text-white shadow-md grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2.5">
+            <div className="text-[9px] font-bold text-indigo-100">{lang === 'ar' ? 'المندوب' : 'Representative'}</div>
+            <div className="text-xs font-extrabold mt-0.5">{sp.repName}</div>
+          </div>
+          <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2.5">
+            <div className="text-[9px] font-bold text-indigo-100">{lang === 'ar' ? 'الشركة' : 'Company'}</div>
+            <div className="text-xs font-extrabold mt-0.5">{sp.companyName}</div>
+          </div>
+          <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2.5">
+            <div className="text-[9px] font-bold text-indigo-100">{lang === 'ar' ? 'الفترة' : 'Period'}</div>
+            <div className="text-xs font-extrabold mt-0.5 font-mono">{sp.dateFrom} ← {sp.dateTo}</div>
+          </div>
+        </div>
+
+        {/* Read-only plan table */}
+        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right border-collapse">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold text-xs">
+                  <th className="px-4 py-3">{t.dayCol}</th>
+                  <th className="px-4 py-3 border-l border-slate-200/60">
+                    <span className="inline-flex items-center gap-1.5"><Sun className="w-3.5 h-3.5 text-amber-500" />{t.morningShift}</span>
+                  </th>
+                  <th className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5"><Moon className="w-3.5 h-3.5 text-indigo-500" />{t.eveningShift}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sp.plans.map((p) => (
+                  <tr key={p.day} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-4 py-4 font-extrabold text-slate-900 text-xs whitespace-nowrap">
+                      {lang === 'ar' ? DAYS_OF_WEEK.daysAr[p.day as keyof typeof DAYS_OF_WEEK.daysAr] : p.day}
+                    </td>
+                    <td className="px-4 py-4 border-l border-slate-100/60">
+                      {p.morning.workplaces.length === 0 ? (
+                        <span className="text-[10px] text-slate-400 italic">{t.emptyShift}</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {p.morning.workplaces.map((w, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 bg-amber-50 border border-amber-100 text-amber-800 px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                              <MapPin className="w-3 h-3" />{w}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      {p.evening.workplaces.length === 0 ? (
+                        <span className="text-[10px] text-slate-400 italic">{t.emptyShift}</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {p.evening.workplaces.map((w, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-100 text-indigo-800 px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                              <MapPin className="w-3 h-3" />{w}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 fade-in text-slate-800" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -741,6 +869,86 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ===== Saved Plans Archive (الخطط المحفوظة) ===== */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-slate-950 text-xs flex items-center gap-2">
+            <Archive className="w-4 h-4 text-indigo-500" />
+            {lang === 'ar' ? 'الخطط المحفوظة' : 'Saved Plans'}
+            <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md text-[10px] font-extrabold">
+              {db.weeklyCycles.length}
+            </span>
+          </h3>
+        </div>
+
+        {db.weeklyCycles.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-xs">
+            <Archive className="w-7 h-7 mx-auto mb-2 opacity-30" />
+            {lang === 'ar'
+              ? 'لا توجد خطط محفوظة بعد — أنشئ خطتك واضغط "حفظ الخطة" لتظهر هنا.'
+              : 'No saved plans yet — build your plan and press "Save Plan" to archive it here.'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {db.weeklyCycles.map((cycle, idx) => {
+              const totalStops = cycle.plans.reduce(
+                (sum, p) => sum + p.morning.workplaces.length + p.evening.workplaces.length, 0
+              );
+              return (
+                <div
+                  key={cycle.id}
+                  className="group bg-slate-50/60 hover:bg-white border border-slate-150 hover:border-indigo-300 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer space-y-3"
+                  onClick={() => setViewingSavedPlan(cycle)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${idx === 0 ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700'}`}>
+                        <Calendar className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-extrabold text-slate-900 text-xs font-mono">
+                          {cycle.dateFrom} ← {cycle.dateTo}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">{cycle.repName}</div>
+                      </div>
+                    </div>
+                    {idx === 0 && (
+                      <span className="shrink-0 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md text-[9px] font-extrabold">
+                        {lang === 'ar' ? 'النشطة' : 'Active'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <span className="text-[10px] text-slate-500 font-bold">
+                      🏥 {totalStops} {lang === 'ar' ? 'محطة زيارة' : 'visit stops'}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleExportPlanDocument('print', cycle); }}
+                        className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-600 hover:text-white rounded-lg transition-all cursor-pointer"
+                        title={lang === 'ar' ? 'طباعة' : 'Print'}
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSavedPlan(cycle.id); }}
+                        className="p-1.5 text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white rounded-lg transition-all cursor-pointer"
+                        title={lang === 'ar' ? 'حذف' : 'Delete'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

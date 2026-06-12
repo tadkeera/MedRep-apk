@@ -1073,70 +1073,91 @@ export default function VisitsView({ lang }: VisitsViewProps) {
       {/* 1. Log New Field Visit State Panel */}
       {true && (
         <>
-          {/* GPS Telemetry Controls */}
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-xl transition-colors ${isGpsEnabled ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-400'}`}>
-                <Navigation className="w-5 h-5" />
+          {/* GPS Telemetry + Visit Type — unified premium control bar */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* GPS card with live status glow */}
+            <div className={`relative overflow-hidden p-4 rounded-2xl shadow-sm border transition-all duration-300 flex items-center justify-between ${
+              isGpsEnabled ? 'bg-gradient-to-l from-emerald-50 to-white border-emerald-200' : 'bg-white border-slate-100'
+            }`}>
+              {isGpsEnabled && <div className="absolute top-0 left-0 w-24 h-24 bg-emerald-400/10 rounded-full blur-2xl -ml-8 -mt-8"></div>}
+              <div className="flex items-center gap-3 relative z-10">
+                <div className={`p-2.5 rounded-xl transition-colors ${isGpsEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                  <Navigation className={`w-5 h-5 ${isGpsEnabled && isFetchingGps ? 'animate-pulse' : ''}`} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                    {lang === 'ar' ? 'تتبع الموقع الجغرافي (GPS)' : 'Location Tracking (GPS)'}
+                    {isGpsEnabled && (
+                      <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md text-[8.5px] font-extrabold">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                        {lang === 'ar' ? 'نشط' : 'LIVE'}
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    {lang === 'ar' ? 'توثيق الإحداثيات الحية للزيارة الميدانية' : 'Attach live coordinates to audit visit'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-800">
-                  {lang === 'ar' ? 'تتبع الموقع الجغرافي (GPS)' : 'Location Tracking (GPS)'}
-                </h4>
-                <p className="text-xs text-slate-500">
-                  {lang === 'ar' ? 'توثيق الإحداثيات الحية للزيارة الميدانية' : 'Attach live coordinates to audit visit'}
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsGpsEnabled(!isGpsEnabled)}
+                dir="ltr"
+                className={`relative cursor-pointer flex items-center rounded-full p-1 transition-colors duration-300 w-12 h-7 focus:outline-none shrink-0 ${
+                  isGpsEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-300 justify-start'
+                }`}
+              >
+                <span className="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" />
+              </button>
             </div>
-            
-            <button
-              type="button"
-              onClick={() => setIsGpsEnabled(!isGpsEnabled)}
-              dir="ltr"
-              className={`relative cursor-pointer flex items-center rounded-full p-1 transition-colors duration-300 w-12 h-7 focus:outline-none shrink-0 ${
-                isGpsEnabled ? 'bg-green-500 justify-end' : 'bg-slate-300 justify-start'
-              }`}
-            >
-              <span className="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" />
-            </button>
-          </div>
 
-          {/* Tabs list switch */}
-          <div className="flex bg-slate-150 p-1 rounded-xl max-w-md w-full border border-slate-200">
-            <button
-              type="button"
-              className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'Doctor' ? 'bg-white text-slate-950 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-              onClick={() => {
-                setActiveTab('Doctor');
-                setDoctorName('');
-              }}
-            >
-              {t.docTab}
-            </button>
-            <button
-              type="button"
-              className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'Customer' ? 'bg-white text-slate-950 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-              onClick={() => {
-                setActiveTab('Customer');
-                setDoctorName('');
-              }}
-            >
-              {t.custTab}
-            </button>
+            {/* Visit-type segmented switch — premium pills */}
+            <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-2">
+              <button
+                type="button"
+                className={`flex-1 h-full min-h-[52px] text-center rounded-xl transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                  activeTab === 'Doctor'
+                    ? 'bg-gradient-to-l from-purple-600 to-violet-600 text-white shadow-md shadow-purple-600/20'
+                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                }`}
+                onClick={() => {
+                  setActiveTab('Doctor');
+                  setDoctorName('');
+                }}
+              >
+                <span className="text-base leading-none">👨‍⚕️</span>
+                <span className="text-[11px] font-extrabold">{t.docTab}</span>
+              </button>
+              <button
+                type="button"
+                className={`flex-1 h-full min-h-[52px] text-center rounded-xl transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                  activeTab === 'Customer'
+                    ? 'bg-gradient-to-l from-purple-600 to-violet-600 text-white shadow-md shadow-purple-600/20'
+                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                }`}
+                onClick={() => {
+                  setActiveTab('Customer');
+                  setDoctorName('');
+                }}
+              >
+                <span className="text-base leading-none">🏥</span>
+                <span className="text-[11px] font-extrabold">{t.custTab}</span>
+              </button>
+            </div>
           </div>
 
           {/* Grid container layout */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             
-            {/* Form panel column */}
-            <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
-              <div className="border-b border-slate-50 pb-3 flex justify-between items-center">
-                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-purple-500" />
+            {/* Form panel column — premium card with accent ribbon */}
+            <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="h-1.5 bg-gradient-to-l from-purple-600 via-violet-500 to-indigo-500"></div>
+              <div className="p-6 space-y-6">
+              <div className="border-b border-slate-100 pb-4 flex justify-between items-center flex-wrap gap-2">
+                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2.5">
+                  <span className="p-2 bg-purple-100 text-purple-600 rounded-xl">
+                    <Calendar className="w-4 h-4" />
+                  </span>
                   {activeTab === 'Doctor' ? t.formTitleDoc : t.formTitleCust}
                 </h3>
                 
@@ -1144,9 +1165,9 @@ export default function VisitsView({ lang }: VisitsViewProps) {
                 <button
                   type="button"
                   onClick={triggerGpsAcquisition}
-                  className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-100 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <Compass className={`w-3.5 h-3.5 ${isFetchingGps ? 'animate-spin text-purple-600' : ''}`} />
+                  <Compass className={`w-3.5 h-3.5 ${isFetchingGps ? 'animate-spin' : ''}`} />
                   {lang === 'ar' ? 'تحديث الإحداثيات' : 'Acquire GPS'}
                 </button>
               </div>
@@ -1417,17 +1438,18 @@ export default function VisitsView({ lang }: VisitsViewProps) {
                   />
                 </div>
 
-                {/* Footer controls submit */}
-                <div className="pt-3 border-t border-slate-50 flex justify-end">
+                {/* Footer controls submit — premium full-width gradient CTA */}
+                <div className="pt-4 border-t border-slate-100">
                   <button
                     type="submit"
-                    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm shadow-purple-500/15 transition-all cursor-pointer"
+                    className="w-full px-6 py-3.5 bg-gradient-to-l from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-700 hover:via-violet-700 hover:to-indigo-700 text-white text-sm font-extrabold rounded-xl flex items-center justify-center gap-2.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer active:scale-[0.99]"
                   >
-                    <Check className="w-4 h-4" />
+                    <Check className="w-5 h-5" />
                     {t.saveVisit}
                   </button>
                 </div>
               </form>
+              </div>
             </div>
 
             {/* Biography Context and History column */}
