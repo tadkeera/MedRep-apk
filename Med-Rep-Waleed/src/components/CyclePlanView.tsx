@@ -265,37 +265,57 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       color: #475569;
       border-left: 1px solid #e2e8f0;
     }
+    /* ===== Modern plan grid with CLEAR separators between days and shifts ===== */
     .plan-grid {
       width: 100%;
       border-collapse: separate;
       border-spacing: 0;
       background: #ffffff;
-      border-radius: 8px;
+      border-radius: 12px;
       overflow: hidden;
-      border: 1px solid #e2e8f0;
+      border: 2px solid #c7d2fe;
     }
     .plan-grid th {
-      padding: 6px 8px;
-      background: #f8fafc;
-      color: #1e293b;
-      text-align: right;
-      font-size: 12px;
+      padding: 10px 12px;
+      color: #ffffff;
+      text-align: center;
+      font-size: 12.5px;
       font-weight: 800;
-      border-bottom: 2px solid #e2e8f0;
+      letter-spacing: 0.3px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
+    .plan-grid th.th-day { background: #312e81; width: 100px; }
+    .plan-grid th.th-morning { background: #d97706; border-right: 3px solid #ffffff; }
+    .plan-grid th.th-evening { background: #4f46e5; border-right: 3px solid #ffffff; }
     .plan-grid td {
-      padding: 6px 8px;
-      border-bottom: 1px solid #f1f5f9;
+      padding: 10px 12px;
       vertical-align: top;
       font-size: 10px;
+      /* THICK day separator: clear bottom border between each day */
+      border-bottom: 3px solid #c7d2fe;
     }
+    /* Clear vertical separator between morning and evening shifts */
+    .plan-grid td.shift-morning {
+      background: #fffbeb;
+      border-right: 3px solid #c7d2fe;
+      border-left: 3px double #fbbf24;
+    }
+    .plan-grid td.shift-evening {
+      background: #eef2ff;
+    }
+    .plan-grid tr:last-child td { border-bottom: none; }
+    /* Alternating subtle day-band tint for even rows on the day column */
+    .plan-grid tr:nth-child(even) td.day { background: #e0e7ff; }
     .plan-grid td.day {
       font-weight: 800;
-      background: #f8fafc;
+      background: #eef2ff;
       text-align: center;
-      width: 90px;
-      border-left: 1px solid #e2e8f0;
+      width: 100px;
+      border-right: none;
       vertical-align: middle;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .day-wrapper {
       display: flex;
@@ -321,17 +341,27 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
       font-weight: 700;
     }
     .workplace-pill {
-      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-      border: 1px solid #cbd5e1;
-      padding: 2px 6px;
-      border-radius: 6px;
+      padding: 3px 8px;
+      border-radius: 8px;
       display: inline-flex;
       align-items: center;
-      gap: 2px;
-      margin: 2px;
+      gap: 3px;
+      margin: 2.5px;
       font-size: 10px;
       font-weight: 700;
       color: #1e293b;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pill-morning {
+      background: #ffffff;
+      border: 1.5px solid #f59e0b;
+      color: #92400e;
+    }
+    .pill-evening {
+      background: #ffffff;
+      border: 1.5px solid #6366f1;
+      color: #3730a3;
     }
     .empty-state {
       display: inline-flex;
@@ -399,19 +429,9 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
   <table class="plan-grid">
     <thead>
       <tr>
-        <th>اليوم</th>
-        <th>
-          <div class="header-content">
-            <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 4px;"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-            الفترة الصباحية
-          </div>
-        </th>
-        <th>
-          <div class="header-content">
-            <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 4px;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-            الفترة المسائية
-          </div>
-        </th>
+        <th class="th-day">📅 اليوم</th>
+        <th class="th-morning">☀️ الفترة الصباحية</th>
+        <th class="th-evening">🌙 الفترة المسائية</th>
       </tr>
     </thead>
     <tbody>
@@ -423,24 +443,18 @@ export default function CyclePlanView({ lang }: CyclePlanViewProps) {
               <span class="day-sub">${p.day.substring(0, 3).toUpperCase()} • اليوم ${idxDay + 1}</span>
             </div>
           </td>
-          <td>
+          <td class="shift-morning">
             ${p.morning.workplaces.length === 0 ? `
               <div class="empty-state">نوبة خفيفة / صفر</div>
             ` : p.morning.workplaces.map(w => `
-              <span class="workplace-pill">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #6366f1; margin-left: 4px;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                ${w}
-              </span>
+              <span class="workplace-pill pill-morning">📍 ${w}</span>
             `).join('')}
           </td>
-          <td>
+          <td class="shift-evening">
             ${p.evening.workplaces.length === 0 ? `
               <div class="empty-state">نوبة خفيفة / صفر</div>
             ` : p.evening.workplaces.map(w => `
-              <span class="workplace-pill">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #6366f1; margin-left: 4px;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                ${w}
-              </span>
+              <span class="workplace-pill pill-evening">📍 ${w}</span>
             `).join('')}
           </td>
         </tr>

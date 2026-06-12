@@ -723,6 +723,19 @@ export function syncVisitWorkplaceCoordinates(): number {
   return updatedCount;
 }
 
+/**
+ * ALARM CUTOFF: visit-based guardrail alarms (geofence breach, ghost calls,
+ * late start, early end, inactivity gaps) are evaluated ONLY for visits on or
+ * after this date. All earlier entries are permanently zeroed-out so legacy
+ * imported data never raises false alerts.
+ */
+const ALARM_CUTOFF_DATE = '2026-06-13';
+
+function isAfterAlarmCutoff(visitDate: string): boolean {
+  if (!visitDate) return false;
+  return visitDate.substring(0, 10) >= ALARM_CUTOFF_DATE;
+}
+
 export function evaluateGuardrailAlarms(): GuardrailAlarm[] {
   // Always refresh historical visit snapshots from the CURRENT workplace
   // coordinates first, so every alarm reflects today's pinned locations.
@@ -730,7 +743,10 @@ export function evaluateGuardrailAlarms(): GuardrailAlarm[] {
   const state = getInitialState();
   const alarms: GuardrailAlarm[] = [];
 
-  state.visits.forEach((v) => {
+  // Only visits from the cutoff date onward participate in alarm evaluation.
+  const alarmVisits = state.visits.filter((v) => isAfterAlarmCutoff(v.visitDate));
+
+  alarmVisits.forEach((v) => {
     // GEOFENCE RULE: compare the visit's actual GPS coordinates against the
     // OFFICIAL PINNED coordinates of the WORKPLACE itself (not the doctor).
     let targetLat: number | null | undefined = undefined;
@@ -765,7 +781,7 @@ export function evaluateGuardrailAlarms(): GuardrailAlarm[] {
     }
   });
 
-  state.visits.forEach((v) => {
+  alarmVisits.forEach((v) => {
     const inTime = new Date(v.checkInTime).getTime();
     const outTime = new Date(v.checkOutTime).getTime();
     const durationMins = (outTime - inTime) / 1000 / 60;
@@ -783,7 +799,7 @@ export function evaluateGuardrailAlarms(): GuardrailAlarm[] {
   });
 
   const visitsByDate: { [date: string]: VisitLog[] } = {};
-  state.visits.forEach((v) => {
+  alarmVisits.forEach((v) => {
     const d = v.visitDate;
     if (!visitsByDate[d]) visitsByDate[d] = [];
     visitsByDate[d].push(v);
