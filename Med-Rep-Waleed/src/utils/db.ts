@@ -484,6 +484,24 @@ export function updateDoctor(doctorId: string, updates: Partial<Doctor>): Doctor
   return updatedDoc;
 }
 
+export function deleteDoctor(doctorId: string): boolean {
+  const state = getInitialState();
+  const index = state.doctors.findIndex((d) => d.id === doctorId);
+  if (index === -1) return false;
+  state.doctors.splice(index, 1);
+  saveState(state);
+  return true;
+}
+
+export function deleteClient(clientId: string): boolean {
+  const state = getInitialState();
+  const index = state.clients.findIndex((c) => c.id === clientId);
+  if (index === -1) return false;
+  state.clients.splice(index, 1);
+  saveState(state);
+  return true;
+}
+
 export function getSampleStockBalance(sampleName: string): number {
   const state = getInitialState();
   let total = 0;
@@ -679,7 +697,36 @@ export interface GuardrailAlarm {
   severity: 'red' | 'yellow';
 }
 
+/**
+ * Re-sync all historical visit records' workplace coordinate snapshots with the
+ * CURRENT pinned coordinates of each workplace. This means past geofence
+ * alarms are always re-evaluated against the latest official workplace
+ * locations (not stale snapshots taken at visit time).
+ */
+export function syncVisitWorkplaceCoordinates(): number {
+  const state = getInitialState();
+  let updatedCount = 0;
+  state.visits.forEach((v) => {
+    if (!v.workplaceName) return;
+    const wp = state.workplaces.find(
+      (w) => w.name.trim().toLowerCase() === v.workplaceName.trim().toLowerCase()
+    );
+    if (wp && typeof wp.latitude === 'number' && typeof wp.longitude === 'number') {
+      if (v.workplaceLatitude !== wp.latitude || v.workplaceLongitude !== wp.longitude) {
+        v.workplaceLatitude = wp.latitude;
+        v.workplaceLongitude = wp.longitude;
+        updatedCount++;
+      }
+    }
+  });
+  if (updatedCount > 0) saveState(state);
+  return updatedCount;
+}
+
 export function evaluateGuardrailAlarms(): GuardrailAlarm[] {
+  // Always refresh historical visit snapshots from the CURRENT workplace
+  // coordinates first, so every alarm reflects today's pinned locations.
+  syncVisitWorkplaceCoordinates();
   const state = getInitialState();
   const alarms: GuardrailAlarm[] = [];
 

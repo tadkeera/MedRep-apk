@@ -81,7 +81,7 @@ export default function VisitsView({ lang }: VisitsViewProps) {
   const [errorModalMsg, setErrorModalMsg] = useState<string | null>(null);
 
   // New features multi-tab configuration
-  const [mainTab, setMainTab] = useState<'log' | 'migration'>('log');
+
 
   // Visits Spreadsheet Report Filters
   const [reportSearchDoctor, setReportSearchDoctor] = useState('');
@@ -1039,49 +1039,39 @@ export default function VisitsView({ lang }: VisitsViewProps) {
 
   return (
     <div className="space-y-6 fade-in text-slate-800" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      {/* Page Title header */}
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-purple-100 text-purple-700 rounded-xl">
-          <CompanionIcon className="w-6 h-6" />
+      {/* Modern gradient page header */}
+      <div className="bg-gradient-to-l from-purple-600 via-violet-600 to-indigo-600 rounded-2xl p-5 text-white shadow-lg shadow-purple-600/20">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-white/15 rounded-xl backdrop-blur-sm">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold tracking-tight">
+                {lang === 'ar' ? 'تسجيل الزيارات اليومية وتتبع التوزيع' : 'Report Daily Visits & SFA Tracker'}
+              </h2>
+              <p className="text-[11px] text-purple-100 mt-0.5">
+                {lang === 'ar' 
+                  ? 'تأكيد زيارة طبية • جلب الإحداثيات آلياً • توزيع عينات برصيد FIFO' 
+                  : 'Log clinic field achievements • auto GPS lock • FIFO stock deductions'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2 text-center">
+              <div className="text-base font-extrabold">{db.visits.length}</div>
+              <div className="text-[9px] font-bold text-purple-100">{lang === 'ar' ? 'إجمالي الزيارات' : 'Total Visits'}</div>
+            </div>
+            <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2 text-center">
+              <div className="text-base font-extrabold">{db.visits.filter(v => v.visitDate === new Date().toISOString().substring(0,10)).length}</div>
+              <div className="text-[9px] font-bold text-purple-100">{lang === 'ar' ? 'زيارات اليوم' : 'Today'}</div>
+            </div>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            {lang === 'ar' ? 'تسجيل الزيارات اليومية وتتبع التوزيع' : 'Report Daily Visits & SFA Tracker'}
-          </h2>
-          <p className="text-xs text-slate-500">
-            {lang === 'ar' 
-              ? 'قم بتأكيد زيارة طبية، جلب الإحداثيات آليًا، وتوزيع عينات برصيد متجدد FIFO.' 
-              : 'Log clinic field achievements, deduct FIFO medicine items, and trigger automatic safety guardrails.'}
-          </p>
-        </div>
-      </div>
-
-      {/* High-Level Feature Switcher */}
-      <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl max-w-xl w-full border border-slate-200 gap-1">
-        <button
-          type="button"
-          className={`flex-1 min-w-[125px] text-center py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
-            mainTab === 'log' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
-          }`}
-          onClick={() => setMainTab('log')}
-        >
-          <Calendar className="w-4 h-4" />
-          {lang === 'ar' ? 'تسجيل زيارة جديدة' : 'Log New Visit'}
-        </button>
-        <button
-          type="button"
-          className={`flex-1 min-w-[125px] text-center py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
-            mainTab === 'migration' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
-          }`}
-          onClick={() => setMainTab('migration')}
-        >
-          <Upload className="w-4 h-4" />
-          {lang === 'ar' ? 'ترحيل ملفات قديمة' : 'Legacy Data Migration'}
-        </button>
       </div>
 
       {/* 1. Log New Field Visit State Panel */}
-      {mainTab === 'log' && (
+      {true && (
         <>
           {/* GPS Telemetry Controls */}
           <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between mb-4">
@@ -1486,357 +1476,6 @@ export default function VisitsView({ lang }: VisitsViewProps) {
       )}
 
 
-
-      {/* 3. Legacy File Data Migrator State Panel */}
-      {mainTab === 'migration' && (() => {
-        const isJanComplete = db.visits.some(v => v.visitDate.startsWith('2026-01'));
-        const isFebComplete = db.visits.some(v => v.visitDate.startsWith('2026-02'));
-        const isMarComplete = db.visits.some(v => v.visitDate.startsWith('2026-03'));
-        const isAprComplete = db.visits.some(v => v.visitDate.startsWith('2026-04'));
-
-        return (
-          <div className="bg-white rounded-2xl border border-slate-150 p-6 shadow-sm space-y-6 text-right">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Upload className="w-5 h-5 text-purple-600 animate-pulse" />
-                {lang === 'ar' ? 'بوابة ترحيل البيانات القديمة والمزامنة الرجعية' : 'Legacy Data Migration & Retroactive Sync Hub'}
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {lang === 'ar' 
-                  ? 'استورد قوائم الأطباء والتاريخ الميداني لخصمه تلقائياً وبأولويته FIFO من الدفعات النشطة عبر ملفات JSON حقيقية.' 
-                  : 'Import legacy doctor listings and historical SFA logs to execute FIFO active bag deductions automatically via real JSON files.'}
-              </p>
-            </div>
-
-            {/* Hidden native input files pointers */}
-            <input 
-              type="file" 
-              ref={doctorsFileRef} 
-              className="hidden" 
-              accept=".json" 
-              onChange={handleDoctorsFilePicked} 
-            />
-            <input 
-              type="file" 
-              ref={janFileRef} 
-              className="hidden" 
-              accept=".json" 
-              onChange={(e) => handleMonthlyFilePicked(lang === 'ar' ? 'يناير 2026' : 'January 2026', '2026-01', e)} 
-            />
-            <input 
-              type="file" 
-              ref={febFileRef} 
-              className="hidden" 
-              accept=".json" 
-              onChange={(e) => handleMonthlyFilePicked(lang === 'ar' ? 'فبراير 2026' : 'February 2026', '2026-02', e)} 
-            />
-            <input 
-              type="file" 
-              ref={marFileRef} 
-              className="hidden" 
-              accept=".json" 
-              onChange={(e) => handleMonthlyFilePicked(lang === 'ar' ? 'مارس 2026' : 'March 2026', '2026-03', e)} 
-            />
-            <input 
-              type="file" 
-              ref={aprFileRef} 
-              className="hidden" 
-              accept=".json" 
-              onChange={(e) => handleMonthlyFilePicked(lang === 'ar' ? 'أبريل 2026' : 'April 2026', '2026-04', e)} 
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* 1. Doctors Migration Card (Right-hand in RTL) */}
-              <div className="bg-slate-50/50 p-5 rounded-xl border border-slate-150 flex flex-col justify-between space-y-4">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-purple-500" />
-                      {lang === 'ar' ? 'ترحيل الأطباء من قائمة JSON' : 'Doctor Directory Migration (JSON)'}
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={() => simulateDemoFile('doctors')}
-                      className="text-[10px] bg-purple-50 hover:bg-purple-100 text-purple-700 px-2.5 py-1 rounded-md font-semibold cursor-pointer border border-purple-200"
-                    >
-                      💡 {lang === 'ar' ? 'التجريب التلقائي (محاكاة)' : 'Load Demo Dr list'}
-                    </button>
-                  </div>
-                  
-                  <div className="border border-dashed border-slate-200 rounded-xl p-5 text-center bg-white space-y-3">
-                    <FileText className="w-8 h-8 text-slate-400 mx-auto" strokeWidth={1.5} />
-                    <p className="text-xs text-slate-500 font-medium">
-                      {lang === 'ar' ? 'يدعم الملفات حقيقية الامتداد .json تحتوي مصفوفة الأطباء' : 'Accepts standard doctors directory config .json block'}
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        disabled={isProcessingState}
-                        onClick={() => doctorsFileRef.current?.click()}
-                        className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-500/10"
-                      >
-                        {isProcessingState ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            {lang === 'ar' ? 'جاري قراءة وتحميل الملف...' : 'Reading & Uploading...'}
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4 text-purple-200" />
-                            {lang === 'ar' ? 'استيراد قائمة الأطباء المحلية (JSON)' : 'Import Local Doctor List (JSON)'}
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <div className="text-[10px] text-slate-400 italic mt-1.5">
-                      {lang === 'ar' ? `الملف المختار: ${doctorsFileName}` : `Selected file: ${doctorsFileName}`}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Monthly Historical Visits & Deductions (Sequential locks) */}
-              <div className="bg-slate-50/50 p-5 rounded-xl border border-slate-150 flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-purple-500" />
-                    {lang === 'ar' ? 'ترحيل الزيارات الشهرية التاريخية (FIFO)' : 'Monthly Visit Logs FIFO Migrator'}
-                  </h4>
-                  
-                  {/* Lock sequential safeguard HUD info alert */}
-                  <div className="bg-amber-50 border border-amber-200/50 text-amber-800 text-[10px] p-2.5 rounded-lg space-y-1">
-                    <div className="font-bold flex items-center gap-1">
-                      <span>⚠️</span>
-                      <span>{lang === 'ar' ? 'حارس تأمين المزامنة التراكمية الـ FIFO:' : 'Cumulative Sequenced FIFO Safekeeping Guard:'}</span>
-                    </div>
-                    <p>
-                      {lang === 'ar' 
-                        ? 'تأمين الحسابات يتطلب ترحيل الأشهر بالتتابع الزمني الصارم (فبراير يفتح بعد ترحيل يناير، ومارس بعد فبراير، وهكذا).' 
-                        : 'Calculations depend on chrono order: Feb requires Jan database records to compute cumulative active balance values safely.'}
-                    </p>
-                  </div>
-
-                  {/* Progressive Month Selection Matrix */}
-                  <div className="space-y-2.5 pt-2">
-                    {/* Month Rows Grid */}
-                    {[
-                      { 
-                        id: 'jan', 
-                        labelAr: 'يناير 2026', 
-                        labelEn: 'January 2026', 
-                        dateStr: '2026-01', 
-                        isUnlocked: true, 
-                        isComplete: isJanComplete,
-                        fileName: janFileName,
-                        ref: janFileRef
-                      },
-                      { 
-                        id: 'feb', 
-                        labelAr: 'فبراير 2026', 
-                        labelEn: 'February 2026', 
-                        dateStr: '2026-02', 
-                        isUnlocked: isJanComplete, 
-                        isComplete: isFebComplete,
-                        fileName: febFileName,
-                        ref: febFileRef
-                      },
-                      { 
-                        id: 'mar', 
-                        labelAr: 'مارس 2026', 
-                        labelEn: 'March 2026', 
-                        dateStr: '2026-03', 
-                        isUnlocked: isJanComplete && isFebComplete, 
-                        isComplete: isMarComplete,
-                        fileName: marFileName,
-                        ref: marFileRef
-                      },
-                      { 
-                        id: 'apr', 
-                        labelAr: 'أبريل 2026', 
-                        labelEn: 'April 2026', 
-                        dateStr: '2026-04', 
-                        isUnlocked: isJanComplete && isFebComplete && isMarComplete, 
-                        isComplete: isAprComplete,
-                        fileName: aprFileName,
-                        ref: aprFileRef
-                      }
-                    ].map((m) => {
-                      const monthName = lang === 'ar' ? m.labelAr : m.labelEn;
-                      return (
-                        <div key={m.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 bg-white rounded-lg border border-slate-100 animate-fadeIn">
-                          {/* Left text month detail */}
-                          <div className="flex items-center gap-1.5">
-                            {!m.isUnlocked ? (
-                              <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            ) : m.isComplete ? (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                            ) : (
-                              <Unlock className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                            )}
-                            <span className={`text-[11px] font-bold ${m.isUnlocked ? 'text-slate-800' : 'text-slate-400'}`}>
-                              {monthName}
-                            </span>
-                            {m.isComplete && (
-                              <span className="bg-emerald-50 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded font-bold">
-                                {lang === 'ar' ? 'مكتمل' : 'Complete'}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Action upload file-pickers details */}
-                          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-                            {/* Open File dialog button */}
-                            <button
-                              type="button"
-                              disabled={!m.isUnlocked}
-                              onClick={() => m.ref.current?.click()}
-                              className={`px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                !m.isUnlocked 
-                                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-sm shadow-indigo-500/10'
-                              }`}
-                            >
-                              <Upload className="w-3.5 h-3.5" />
-                              {m.fileName !== (lang === 'ar' ? 'لم يتم اختيار ملف' : 'No file chosen') 
-                                ? m.fileName 
-                                : lang === 'ar' ? 'استيراد ملف JSON' : 'Import JSON file'}
-                            </button>
-
-                            {/* Simulation toggle buttons for instant testing */}
-                            {m.isUnlocked && !m.isComplete && (
-                              <button
-                                type="button"
-                                onClick={() => simulateDemoFile(m.id as any)}
-                                className="px-2 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[9px] font-semibold text-slate-600 flex items-center gap-0.5 cursor-pointer"
-                                title={lang === 'ar' ? 'محاكاة ترحيل البيانات' : 'Simulate Migration'}
-                              >
-                                💡
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Retroactive FIFO Stock Realignment */}
-              <div className="bg-purple-50/35 p-5 rounded-xl border border-purple-100 flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <h4 className="font-bold text-purple-950 text-xs flex items-center gap-1.5">
-                    <ArrowUpDown className="w-4 h-4 text-purple-600 animate-pulse font-bold" />
-                    {lang === 'ar' ? 'مزامنة فواتير ومخازن الـ FIFO (خصم الزيارات القديمة)' : 'FIFO Ledger Synchronizer (Deduct Old Visits)'}
-                  </h4>
-                  
-                  <p className="text-[11px] text-purple-950/80 leading-relaxed text-right">
-                    {lang === 'ar' 
-                      ? 'إذا قمت باستيراد زيارات سابقة أو تعديل فواتير المستودع لاحقاً، تتيح لك هذه الأداة إعادة ضبط مخزون جميع فواتير النظام لخصم كافة العينات الموزعة تاريخياً بترتيب زمني صارم (FIFO) وبمنتهى الدقة.' 
-                      : 'If you imported historical visits or added warehouse invoices later, use this tool to re-calculate and apply precise chronological (FIFO) stock deductions across all visit logs.'}
-                  </p>
-
-                  <button
-                    type="button"
-                    disabled={isRecalculating}
-                    onClick={handleRecomputeAllFIFO}
-                    className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-xs font-bold rounded-lg cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-purple-500/10"
-                  >
-                    {isRecalculating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {lang === 'ar' ? 'جاري إعادة المعالجة والحساب للـ FIFO...' : 'Re-allocating stocks via FIFO cascade...'}
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4 text-purple-200" />
-                        {lang === 'ar' ? 'بدء خصم العينات وإعادة مطابقة الـ FIFO' : 'Apply Retroactive FIFO Deductions'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* 4. Reset & Rollback All Migrated Visits */}
-              <div className="bg-red-50/35 p-5 rounded-xl border border-red-100 flex flex-col justify-between space-y-4">
-                <div className="space-y-3 font-sans">
-                  <h4 className="font-bold text-red-950 text-xs flex items-center gap-1.5">
-                    <Trash2 className="w-4 h-4 text-red-600 font-bold" />
-                    {lang === 'ar' ? 'تصفير بيانات التطبيق كاملاً وقائمة الأطباء' : 'Reset All App Data & Doctors List'}
-                  </h4>
-                  
-                  <p className="text-[11px] text-red-950/80 leading-relaxed text-right">
-                    {lang === 'ar' 
-                      ? 'تقوم هذه الأداة بحذف كافة الزيارات المسجلة وقائمة الأطباء والخطط المجدولة، وإرجاع كميات المخزون للكميات الأصلية المدخلة بالفواتير بنسبة 100% لتصحيح أوجه التطابق من البداية.' 
-                      : 'Deletes all visits, clears the entire doctors database list, resets weekly plans, and restores stock quantities back to their initial invoice quantities, allowing a clean slate for correct imports.'}
-                  </p>
-
-                  <button
-                    type="button"
-                    disabled={isRecalculating}
-                    onClick={handleWipeMigratedVisits}
-                    className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white text-xs font-bold rounded-lg cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-red-500/10"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-200" />
-                    {lang === 'ar' ? 'تصفير وتطهير الذاكرة واستعادة المخزون الأصلي' : 'Full Wipe & Recover Original Stock'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Stamped Migration Log HUD */}
-            {(migrationSuccessCount !== null || migrationLogs.length > 0 || recalcSummary !== null) && (
-              <div className="bg-slate-900 text-slate-300 rounded-xl p-5 border border-slate-800 space-y-3 font-mono text-[11px] text-right">
-                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                  <span className="text-purple-400 font-bold">💻 {lang === 'ar' ? 'سجل ترحيل النظام المركزي:' : 'Migration central terminal log:'}</span>
-                  {(migrationSuccessCount !== null || recalcSummary !== null) && (
-                    <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded font-sans text-xs font-bold animate-pulse">
-                      {lang === 'ar' 
-                        ? `بنجاح: ${recalcSummary ? recalcSummary.totalDeductionsCount : migrationSuccessCount} عينة` 
-                        : `Success: ${recalcSummary ? recalcSummary.totalDeductionsCount : migrationSuccessCount} items`}
-                    </span>
-                  )}
-                </div>
-
-                {/* Monospace terminal logs */}
-                <div className="max-h-44 overflow-y-auto divide-y divide-slate-800/40 text-[10px] space-y-1 pr-1 text-right">
-                  {recalcSummary && (
-                    <div className="py-1 text-emerald-400 font-bold">
-                      {lang === 'ar'
-                        ? `✔ تم الانتهاء بنجاح من المزامنة والخصم التراكمي: معالجة ${recalcSummary.processedVisitsCount} زيارات وصرف ${recalcSummary.totalDeductionsCount} عينات بنظام الـ FIFO.`
-                        : `✔ Complete: Processed ${recalcSummary.processedVisitsCount} visits and spent ${recalcSummary.totalDeductionsCount} sample units via FIFO cascade.`}
-                    </div>
-                  )}
-                  {migrationLogs.map((log, i) => (
-                    <div key={i} className="py-1 text-slate-300 flex items-start gap-1 justify-end text-right">
-                      <span>{log}</span>
-                      <span className="text-slate-500 shrink-0">[{i+1}]</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Monospace warning/infraction alarms */}
-                {((recalcSummary && recalcSummary.insufficientStockAlarms.length > 0) || migrationErrors.length > 0) && (
-                  <div className="border-t border-slate-800 pt-3 space-y-1.5 text-xs text-right">
-                    <div className="text-amber-400 font-bold font-sans">⚠️ {lang === 'ar' ? 'إنذارات ومخالفات الخصم الرجعي (FIFO Alarms):' : 'Retroactive Deduction Warnings (FIFO Alarms):'}</div>
-                    <div className="space-y-1 text-right">
-                      {recalcSummary?.insufficientStockAlarms.map((err, i) => (
-                        <div key={`recalc-${i}`} className="text-red-400 text-[11px] bg-red-400/5 border border-red-400/15 p-1 px-2 rounded text-right">
-                          • {err}
-                        </div>
-                      ))}
-                      {migrationErrors.map((err, i) => (
-                        <div key={i} className="text-red-400 text-[11px] bg-red-400/5 border border-red-400/15 p-2 rounded text-right">
-                          • {err}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {/* Dynamic FIFO Quantity editing dialog */}
       {editingVisitId !== null && editingSampleName !== null && (

@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { getInitialState, saveVirtualFile, updateDoctor, addClient, updateClient, getClients } from '../utils/db';
+import { getInitialState, saveVirtualFile, updateDoctor, addClient, updateClient, getClients, deleteDoctor, deleteClient } from '../utils/db';
 import { Doctor, Client, ClientCategory } from '../types';
-import { FileText, Search, TrendingUp, Sparkles, Download, Printer, Calendar, Loader, Plus, MapPin, Check, ArrowRight, Building2, Stethoscope, Pencil } from 'lucide-react';
+import { FileText, Search, TrendingUp, Sparkles, Download, Printer, Calendar, Loader, Plus, MapPin, Check, ArrowRight, Building2, Stethoscope, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import { jsPDF } from 'jspdf';
@@ -64,6 +64,8 @@ export default function ReportsView({ lang }: ReportsViewProps) {
   // Full-page map location picker (Aden, Yemen — satellite view)
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [pickerPos, setPickerPos] = useState<[number, number]>([12.7855, 45.0187]); // Aden default
+  // Delete confirmation dialog (doctor or client)
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: 'doctor' | 'client'; id: string; name: string } | null>(null);
 
   // Client modal
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -168,11 +170,19 @@ export default function ReportsView({ lang }: ReportsViewProps) {
   }[lang];
 
   // 1. Sample report data calculations
+  // Exclude zero-quantity rows: only show visits where the sample was actually
+  // dispensed (quantity > 0) per the reporting requirement.
   const filteredVisitsForSample = db.visits.filter((v) => {
     const isWithinDate = new Date(v.visitDate) >= new Date(dateFrom) && new Date(v.visitDate) <= new Date(dateTo);
-    const hasSample = v.samples.some((s) => s.sampleName === selectedSample);
+    const hasSample = v.samples.some((s) => s.sampleName === selectedSample && s.quantityDistributed > 0);
     return isWithinDate && hasSample;
   });
+
+  // Total boxes dispensed for the selected sample within the chosen period
+  const totalSampleDispensed = filteredVisitsForSample.reduce((sum, v) => {
+    const dist = v.samples.find((s) => s.sampleName === selectedSample);
+    return sum + (dist?.quantityDistributed || 0);
+  }, 0);
 
   // 2. Doctor report data calculations
   const doctorVisits = db.visits
@@ -1379,7 +1389,7 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                           <td className="px-4 py-3 font-mono font-medium">{v.visitDate}</td>
                           <td className="px-4 py-3 font-semibold text-slate-900">{v.doctorName || 'عميل'}</td>
                           <td className="px-4 py-3 text-center text-blue-600 font-extrabold font-mono">
-                            {distribution?.quantityDistributed} وحدات
+                            {distribution?.quantityDistributed} {lang === 'ar' ? 'علبة' : 'box(es)'}
                           </td>
                           <td className="px-4 py-3 font-medium">{v.workplaceName}</td>
                           <td className="px-4 py-3 text-slate-400 font-light truncate max-w-sm" title={v.notes}>
@@ -1389,6 +1399,18 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                       );
                     })}
                   </tbody>
+                  {/* Total dispensed boxes for the selected period */}
+                  <tfoot>
+                    <tr className="bg-blue-50 border-t-2 border-blue-200 font-extrabold text-slate-800">
+                      <td className="px-4 py-3" colSpan={2}>
+                        {lang === 'ar' ? '📦 إجمالي العينات المصروفة للفترة المحددة' : '📦 Total samples dispensed in selected period'}
+                      </td>
+                      <td className="px-4 py-3 text-center text-blue-700 font-mono text-sm">
+                        {totalSampleDispensed} {lang === 'ar' ? 'علبة' : 'box(es)'}
+                      </td>
+                      <td className="px-4 py-3" colSpan={2}></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
@@ -1719,24 +1741,33 @@ export default function ReportsView({ lang }: ReportsViewProps) {
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                     <span className="text-[9px] text-slate-400 font-mono">#{index + 1}</span>
-                    <button
-                      onClick={() => {
-                        setEditingDoctor(d);
-                        setEditDocFields({
-                          name: d.name,
-                          speciality: d.speciality,
-                          classRating: d.classRating,
-                          workplace1: d.workplace1,
-                          workplace2: d.workplace2,
-                          locationLatitude: d.locationLatitude,
-                          locationLongitude: d.locationLongitude
-                        });
-                      }}
-                      className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
-                    >
-                      <Pencil className="w-3 h-3" />
-                      {lang === 'ar' ? 'تعديل' : 'Edit'}
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => {
+                          setEditingDoctor(d);
+                          setEditDocFields({
+                            name: d.name,
+                            speciality: d.speciality,
+                            classRating: d.classRating,
+                            workplace1: d.workplace1,
+                            workplace2: d.workplace2,
+                            locationLatitude: d.locationLatitude,
+                            locationLongitude: d.locationLongitude
+                          });
+                        }}
+                        className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        {lang === 'ar' ? 'تعديل' : 'Edit'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete({ kind: 'doctor', id: d.id, name: d.name })}
+                        className="flex items-center gap-1.5 text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        {lang === 'ar' ? 'حذف' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1830,23 +1861,32 @@ export default function ReportsView({ lang }: ReportsViewProps) {
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                     <span className="text-[9px] text-slate-400 font-mono">#{index + 1}</span>
-                    <button
-                      onClick={() => {
-                        setEditingClient(client);
-                        setEditClientFields({
-                          name: client.name,
-                          category: client.type,
-                          address: client.address,
-                          latitude: client.locationLatitude,
-                          longitude: client.locationLongitude
-                        });
-                        setIsClientModalOpen(true);
-                      }}
-                      className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
-                    >
-                      <Pencil className="w-3 h-3" />
-                      {lang === 'ar' ? 'تعديل' : 'Edit'}
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => {
+                          setEditingClient(client);
+                          setEditClientFields({
+                            name: client.name,
+                            category: client.type,
+                            address: client.address,
+                            latitude: client.locationLatitude,
+                            longitude: client.locationLongitude
+                          });
+                          setIsClientModalOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        {lang === 'ar' ? 'تعديل' : 'Edit'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete({ kind: 'client', id: client.id, name: client.name })}
+                        className="flex items-center gap-1.5 text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        {lang === 'ar' ? 'حذف' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1919,6 +1959,68 @@ export default function ReportsView({ lang }: ReportsViewProps) {
         })() : null}
       </AnimatePresence>
 
+      {/* Delete confirmation dialog (doctor / client) */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[120] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 10 }}
+              className="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4"
+              dir={lang === 'ar' ? 'rtl' : 'ltr'}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-rose-100 text-rose-600 rounded-xl shrink-0">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-900 text-sm">
+                  {confirmDelete.kind === 'doctor'
+                    ? (lang === 'ar' ? 'تأكيد حذف الطبيب ⚠️' : 'Confirm Doctor Deletion ⚠️')
+                    : (lang === 'ar' ? 'تأكيد حذف العميل ⚠️' : 'Confirm Client Deletion ⚠️')}
+                </h3>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {lang === 'ar'
+                  ? `هل أنت متأكد من حذف "${confirmDelete.name}" نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`
+                  : `Are you sure you want to permanently delete "${confirmDelete.name}"? This action cannot be undone.`}
+              </p>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(null)}
+                  className="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  {lang === 'ar' ? 'لا، تراجع' : 'No, Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirmDelete.kind === 'doctor') {
+                      deleteDoctor(confirmDelete.id);
+                    } else {
+                      deleteClient(confirmDelete.id);
+                    }
+                    setDb(getInitialState());
+                    setClientsData(getClients());
+                    setConfirmDelete(null);
+                  }}
+                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition-colors shadow-md shadow-rose-600/20 cursor-pointer"
+                >
+                  {lang === 'ar' ? 'نعم، احذف نهائياً' : 'Yes, Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -19,6 +19,8 @@ export default function MapView({ lang }: MapViewProps) {
   const [tab, setTab] = useState<'doctors' | 'hospitals'>('doctors');
   const [isGenerating, setIsGenerating] = useState(false);
   const [planGenerated, setPlanGenerated] = useState(false);
+  // Map layer type: satellite (hybrid with labels) or streets
+  const [mapType, setMapType] = useState<'satellite' | 'streets'>('streets');
   
   const state = getInitialState();
   const doctors = state.doctors || [];
@@ -49,6 +51,38 @@ export default function MapView({ lang }: MapViewProps) {
 
   // Default coordinate for Sana'a, Yemen
   const yemenCenter: [number, number] = [15.3694, 44.1910];
+
+  // Tile layers: satellite hybrid (with Arabic labels) vs OpenStreetMap streets
+  const tileUrl = mapType === 'satellite'
+    ? 'https://mt1.google.com/vt/lyrs=y&hl=ar&x={x}&y={y}&z={z}'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const tileAttribution = mapType === 'satellite'
+    ? 'Imagery © Google'
+    : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // Map type switcher button group (rendered above each map)
+  const MapTypeSwitcher = () => (
+    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm w-fit">
+      <button
+        type="button"
+        onClick={() => setMapType('streets')}
+        className={`px-3.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+          mapType === 'streets' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'
+        }`}
+      >
+        🗺️ {lang === 'ar' ? 'الطرقات والشوارع' : 'Streets'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setMapType('satellite')}
+        className={`px-3.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+          mapType === 'satellite' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'
+        }`}
+      >
+        🛰️ {lang === 'ar' ? 'قمر صناعي' : 'Satellite'}
+      </button>
+    </div>
+  );
 
   const handleGeneratePlan = () => {
     setIsGenerating(true);
@@ -130,11 +164,13 @@ export default function MapView({ lang }: MapViewProps) {
             </button>
           </div>
 
+          <MapTypeSwitcher />
           <div className="h-[600px] bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm relative z-0">
-            <MapContainer center={yemenCenter} zoom={6} className="w-full h-full">
+            <MapContainer key={`doctors-${mapType}`} center={yemenCenter} zoom={6} className="w-full h-full">
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution={tileAttribution}
+                url={tileUrl}
+                maxZoom={20}
               />
               {doctors.flatMap((doctor) => {
                 // MULTI-WORKPLACE PLOTTING: a doctor appears at EVERY linked
@@ -178,11 +214,13 @@ export default function MapView({ lang }: MapViewProps) {
 
       {tab === 'hospitals' && (
         <div className="space-y-4">
+          <MapTypeSwitcher />
           <div className="h-[600px] bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm relative z-0">
-            <MapContainer center={yemenCenter} zoom={6} className="w-full h-full">
+            <MapContainer key={`hospitals-${mapType}`} center={yemenCenter} zoom={6} className="w-full h-full">
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution={tileAttribution}
+                url={tileUrl}
+                maxZoom={20}
               />
               {clients.map((client) => {
                 const lat = client.locationLatitude || (15.3694 + (Math.random() - 0.5) * 4);
