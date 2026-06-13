@@ -487,16 +487,23 @@ export default function ReportsView({ lang }: ReportsViewProps) {
       </tr>
     </thead>
     <tbody>
-      ${docsToPrint.map((d, index) => `
+      ${docsToPrint.map((d, index) => {
+        const allWps = [
+          ...(d.workplace1 ? [d.workplace1] : []),
+          ...(d.workplace2 ? [d.workplace2] : []),
+          ...((d.workplaceLocations || []).map(l => l.workplaceName))
+        ].filter((v, i, a) => a.indexOf(v) === i);
+        
+        return `
         <tr>
           <td>${index + 1}</td>
           <td><strong>${d.name}</strong></td>
           <td>${d.speciality}</td>
           <td>${d.classRating}</td>
-          <td>${d.workplace1 || '-'}</td>
-          <td>${d.workplace2 || '-'}</td>
+          <td colspan="2">${allWps.join(' ، ') || '-'}</td>
         </tr>
-      `).join('')}
+        `;
+      }).join('')}
     </tbody>
   </table>
 </body>

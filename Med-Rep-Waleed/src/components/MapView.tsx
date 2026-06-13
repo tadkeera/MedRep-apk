@@ -240,13 +240,15 @@ export default function MapView({ lang }: MapViewProps) {
                           <ul className="text-[11px] text-slate-500 space-y-1 list-disc list-inside">
                             {doctors.filter(d => 
                               (d.workplace1?.toLowerCase() === client.name.toLowerCase()) || 
-                              (d.workplace2?.toLowerCase() === client.name.toLowerCase())
+                              (d.workplace2?.toLowerCase() === client.name.toLowerCase()) ||
+                              (d.workplaceLocations && d.workplaceLocations.some(loc => loc.workplaceName.toLowerCase() === client.name.toLowerCase()))
                             ).map((d, idx) => (
                               <li key={idx}>{d.name} <span className="text-indigo-400">({d.classRating})</span></li>
                             ))}
                             {doctors.filter(d => 
                               (d.workplace1?.toLowerCase() === client.name.toLowerCase()) || 
-                              (d.workplace2?.toLowerCase() === client.name.toLowerCase())
+                              (d.workplace2?.toLowerCase() === client.name.toLowerCase()) ||
+                              (d.workplaceLocations && d.workplaceLocations.some(loc => loc.workplaceName.toLowerCase() === client.name.toLowerCase()))
                             ).length === 0 && (
                               <li className="text-slate-400 italic">{lang === 'ar' ? 'لا يوجد' : 'None'}</li>
                             )}

@@ -444,6 +444,21 @@ export function linkDoctorToWorkplace(doctorName: string, workplaceName: string)
     }
   }
 
+  // 4. DATA INTEGRITY: Update existing visits for this doctor if they have no workplace
+  // or if we want to ensure the report shows the newly linked center for related visits.
+  // The user wants the application to be an "integrated block".
+  state.visits.forEach(v => {
+    if (v.doctorName && v.doctorName.trim().toLowerCase() === doctorName.trim().toLowerCase()) {
+      if (!v.workplaceName || v.workplaceName === 'مكان عمل غير محدد') {
+        v.workplaceName = wpName;
+        if (wp.locationPinned) {
+          v.workplaceLatitude = wp.latitude || undefined;
+          v.workplaceLongitude = wp.longitude || undefined;
+        }
+      }
+    }
+  });
+
   saveState(state);
 }
 
@@ -503,9 +518,30 @@ export function deleteClient(clientId: string): boolean {
   // PERMANENT DELETE: also remove the matching workplace entry, so the client
   // never reappears in the list as a "convert to client" workplace row.
   if (clientName) {
+    const searchName = clientName.toLowerCase();
     state.workplaces = state.workplaces.filter(
-      (w) => w.name.trim().toLowerCase() !== clientName.toLowerCase()
+      (w) => w.name.trim().toLowerCase() !== searchName
     );
+
+    // CASCADING DELETE: Remove this center/workplace from all linked doctors
+    state.doctors.forEach(doc => {
+      if (doc.workplace1 && doc.workplace1.trim().toLowerCase() === searchName) {
+        doc.workplace1 = doc.workplace2; // Shift workplace2 to workplace1 if it exists
+        doc.workplace2 = undefined;
+      } else if (doc.workplace2 && doc.workplace2.trim().toLowerCase() === searchName) {
+        doc.workplace2 = undefined;
+      }
+      
+      if (doc.workplaceLocations) {
+        doc.workplaceLocations = doc.workplaceLocations.filter(
+          loc => loc.workplaceName.trim().toLowerCase() !== searchName
+        );
+      }
+    });
+
+    // Also remove from any visit logs or update them if necessary? 
+    // Usually visit logs are historical, but user wants consistency.
+    // Let's at least keep the name but maybe clear the workplace coordinates if they were linked.
   }
 
   saveState(state);
