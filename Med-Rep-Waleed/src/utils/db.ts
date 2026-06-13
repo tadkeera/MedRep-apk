@@ -1406,6 +1406,54 @@ export function updateClient(clientId: string, updates: Partial<Client>): Client
   return updatedClient;
 }
 
+/**
+ * Synchronizes all historical visits from January 2026 to December 2026.
+ * For each doctor, find their primary linked workplace and update any visit that
+ * is missing a workplace name or has a generic placeholder.
+ */
+export function syncAllHistoricalVisits(): { updatedCount: number } {
+  const state = getInitialState();
+  let updatedCount = 0;
+
+  state.visits.forEach((v) => {
+    // Check if the visit belongs to the year 2026 (or adjust as needed)
+    // The user mentioned January to December.
+    const is2026 = v.visitDate.startsWith('2026');
+    if (!is2026) return;
+
+    if (v.clientType === 'Doctor' && v.doctorName) {
+      const doc = state.doctors.find(
+        (d) => d.name.trim().toLowerCase() === v.doctorName?.trim().toLowerCase()
+      );
+
+      if (doc) {
+        // Find the best workplace to assign
+        const targetWp = doc.workplace1 || (doc.workplaceLocations && doc.workplaceLocations.length > 0 ? doc.workplaceLocations[0].workplaceName : null);
+        
+        if (targetWp) {
+          const oldWp = v.workplaceName;
+          const isGeneric = !oldWp || oldWp === 'مكان عمل غير محدد' || oldWp.includes('غير محدد');
+          
+          if (isGeneric || oldWp !== targetWp) {
+            v.workplaceName = targetWp;
+            
+            // Also sync coordinates if the workplace is pinned
+            const wpEntry = state.workplaces.find(w => w.name.trim().toLowerCase() === targetWp.trim().toLowerCase());
+            if (wpEntry && wpEntry.locationPinned) {
+              v.workplaceLatitude = wpEntry.latitude ?? undefined;
+              v.workplaceLongitude = wpEntry.longitude ?? undefined;
+            }
+            updatedCount++;
+          }
+        }
+      }
+    }
+  });
+
+  if (updatedCount > 0) saveState(state);
+  return { updatedCount };
+}
+
 export function wipeAllDataComplete(): { deletedVisitsCount: number; deletedDoctorsCount: number } {
   const state = getInitialState();
   const deletedVisitsCount = state.visits.length;

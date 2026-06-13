@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { getInitialState, saveVirtualFile, updateDoctor, addClient, updateClient, getClients, deleteDoctor, deleteClient, linkDoctorToWorkplace } from '../utils/db';
+import { getInitialState, saveVirtualFile, updateDoctor, addClient, updateClient, getClients, deleteDoctor, deleteClient, linkDoctorToWorkplace, syncAllHistoricalVisits } from '../utils/db';
 import { Doctor, Client, ClientCategory } from '../types';
 import { FileText, Search, TrendingUp, Sparkles, Download, Printer, Calendar, Loader, Plus, MapPin, Check, ArrowRight, Building2, Stethoscope, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -72,6 +72,7 @@ export default function ReportsView({ lang }: ReportsViewProps) {
   const [docSearchQuery, setDocSearchQuery] = useState('');
   const [pendingDoctors, setPendingDoctors] = useState<string[]>([]);
   const [centerLinkSaved, setCenterLinkSaved] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Client modal
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -2004,6 +2005,24 @@ export default function ReportsView({ lang }: ReportsViewProps) {
                 >
                   <Plus className="w-4 h-4" />
                   {t.addNewClient}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsSyncing(true);
+                    setTimeout(() => {
+                      const result = syncAllHistoricalVisits();
+                      setDb(getInitialState());
+                      setIsSyncing(false);
+                      alert(lang === 'ar' 
+                        ? `تمت مزامنة وتحديث ${result.updatedCount} زيارة بنجاح من يناير إلى ديسمبر!` 
+                        : `Successfully synced and updated ${result.updatedCount} visits from Jan to Dec!`);
+                    }, 1000);
+                  }}
+                  disabled={isSyncing}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl text-xs font-extrabold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSyncing ? <Loader className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                  {lang === 'ar' ? 'تحديث ومزامنة البيانات' : 'Update & Sync Data'}
                 </button>
               </div>
             </div>
